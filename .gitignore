@@ -1,0 +1,4 @@
+# Seus dados pessoais (cafés, notas, fotos, backups) NÃO vão pro GitHub
+data/
+__pycache__/
+.DS_Store

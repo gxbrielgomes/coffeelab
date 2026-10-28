@@ -9,7 +9,7 @@ if /usr/bin/curl -s -o /dev/null --max-time 1 "$URL/api/state"; then
   echo "  servidor já estava ligado" >> "$LOG"
 else
   echo "  ligando servidor..." >> "$LOG"
-  nohup /usr/bin/python3 server.py --no-browser >> data/servidor.log 2>&1 < /dev/null &
+  nohup /usr/bin/python3 -u server.py --no-browser >> data/servidor.log 2>&1 < /dev/null &
   disown
   for i in $(seq 1 40); do
     /usr/bin/curl -s -o /dev/null --max-time 1 "$URL/api/state" && { echo "  servidor no ar" >> "$LOG"; break; }

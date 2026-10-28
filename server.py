@@ -336,8 +336,9 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "CoffeeLab/1.0"
 
     def log_message(self, fmt, *args):
-        if "/api/" in (args[0] if args else ""):
-            sys.stderr.write("  %s\n" % (fmt % args))
+        ip = self.client_address[0] if self.client_address else "?"
+        if "/api/" in (args[0] if args else "") or not ip.startswith("127."):
+            sys.stderr.write("  [%s] %s\n" % (ip, fmt % args))
 
     # -- respostas
     def send_json(self, obj, status=200, extra_headers=None):

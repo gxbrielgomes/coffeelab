@@ -672,6 +672,7 @@ function brewSignals(b) {
   const gz = brewGauge(b);
   if (m.kind === "espresso" && gz != null && gz >= GAUGE_RED + 0.5) sig.over = sig.highGauge = true;
   // "mais fino"/"mais grosso" escrito pelo próprio usuário
+  if (/(meio|um pouco|pouquinho|levemente|ligeiramente|leve(mente)?|quase|de leve)\s+(acid|azed|amarg|aguad|fraco|forte|seco|adstring)/.test(t)) sig.mild = true;
   if (/mais fin|moer fin|afinar/.test(t)) sig.wantFiner = true;
   if (/mais gross|moer gross|engross|abrir (a )?moagem/.test(t)) sig.wantCoarser = true;
   return sig;
@@ -711,8 +712,9 @@ function coachFor(coffeeId, methodId) {
   // contagem dos sinais nos últimos preparos (peso maior pros mais recentes e pros mal avaliados)
   const score = {}; const seen = {};
   recent.forEach((b, i) => {
-    const w = (i < 3 ? 1.5 : 1) * (b.rating != null && num(b.rating) < 7 ? 1.4 : 1);
-    Object.keys(brewSignals(b)).forEach((k) => { score[k] = (score[k] || 0) + w; seen[k] = (seen[k] || 0) + 1; });
+    const sg = brewSignals(b);
+    const w = (i < 3 ? 1.5 : 1) * (b.rating != null && num(b.rating) < 7 ? 1.4 : 1) * (sg.mild ? 0.5 : 1);
+    Object.keys(sg).forEach((k) => { score[k] = (score[k] || 0) + w; seen[k] = (seen[k] || 0) + 1; });
   });
   const lastSig = brewSignals(last);
 
@@ -720,7 +722,7 @@ function coachFor(coffeeId, methodId) {
   const nn = nextNote(last);
   if (nn) tips.push({ kind: "note", title: "Você deixou um recado pra hoje", text: `“${nn}”`, why: `anotado no seu último ${m.name.toLowerCase()} (${fmtDayLabel(brewTime(last)).toLowerCase()})` });
 
-  // 1) moagem: compara notas por valor de moagem no mesmo moedor
+  // 1) moagem: pondera o que você já testou antes de sugerir mexer
   if (g && last.grind != null && last.grind !== "") {
     const sameG = pool.filter((b) => b.grinder_id === g.id && b.grind != null && b.grind !== "");
     const groups = {};
@@ -728,30 +730,86 @@ function coachFor(coffeeId, methodId) {
     const stats = Object.entries(groups).map(([k, bs]) => {
       const rated = bs.filter((b) => b.rating != null);
       const sig = bs.map(brewSignals);
-      return { v: num(k), n: bs.length, avg: avg(rated.map((b) => num(b.rating))), under: sig.filter((s) => s.under).length, over: sig.filter((s) => s.over).length };
+      return { v: num(k), n: bs.length, avg: avg(rated.map((b) => num(b.rating))), under: sig.filter((x) => x.under).length, over: sig.filter((x) => x.over).length };
     });
     const cur = num(last.grind);
-    const curS = stats.find((s) => s.v === cur);
-    const best = stats.filter((s) => s.avg != null).sort((a, b) => b.avg - a.avg || b.n - a.n)[0];
+    const curS = stats.find((x) => x.v === cur);
+    const best = stats.filter((x) => x.avg != null && x.n >= 1).sort((a, b) => b.avg - a.avg || b.n - a.n)[0];
     const overW = (score.over || 0) + (lastSig.wantCoarser ? 3 : 0);
     const underW = (score.under || 0) + (lastSig.wantFiner ? 3 : 0);
-    let target = null, why = [];
-    if (overW > underW && overW >= 1.4) {
-      target = cur + 1;
-      const better = stats.filter((s) => s.v > cur && s.avg != null && (!curS || curS.avg == null || s.avg > curS.avg)).sort((a, b) => b.avg - a.avg)[0];
-      if (better) target = better.v;
-      why.push(`com ${grindLabel(g, cur)} apareceu amargor/extração lenta${seen.over > 1 ? ` em ${seen.over} cafés` : ""}`);
-      if (lastSig.slowShot) why.push(`o último shot levou ${fmtTime(last.time_s)}`);
-      if (lastSig.highGauge) why.push("o ponteiro chegou no vermelho");
-      tips.push({ kind: "grind", title: `Moa um pouco mais grosso: ${grindLabel(g, target)}`, text: `Hoje tenta ${grindLabel(g, target)} no ${g.name} em vez de ${cur}.`, why: why.join(" · ") });
-    } else if (underW > overW && underW >= 1.4) {
-      target = cur - 1;
-      const better = stats.filter((s) => s.v < cur && s.avg != null && (!curS || curS.avg == null || s.avg > curS.avg)).sort((a, b) => b.avg - a.avg)[0];
-      if (better) target = better.v;
-      why.push(`com ${grindLabel(g, cur)} ficou ácido/aguado${seen.under > 1 ? ` em ${seen.under} cafés` : ""}`);
-      if (lastSig.fastShot) why.push(`o último shot saiu em ${fmtTime(last.time_s)}`);
-      tips.push({ kind: "grind", title: `Moa um pouco mais fino: ${grindLabel(g, target)}`, text: `Hoje tenta ${grindLabel(g, target)} no ${g.name} em vez de ${cur}.`, why: why.join(" · ") });
-    } else if (best && curS && best.v !== cur && curS.avg != null && best.avg - curS.avg >= 0.75 && best.n >= 1) {
+    const unit = g.unit || "cliques";
+
+    // ajustes sem mexer na moagem: escolhe UMA alavanca principal pelo que os dados mostram
+    const yieldG = num(last.yield_g), doseG = num(last.dose_g), temp = num(last.temp_c), waterG = num(last.water_g), tS = num(last.time_s);
+    const lever = (problem) => {
+      const opts = [];
+      if (isEsp) {
+        if (problem === "under") {
+          if (tS && tS < 22) opts.push({ t: "Compacta com mais firmeza e capricha no WDT", d: `O shot correu rápido (${fmtTime(tS)}): mexe bem com o WDT, nivela e aperta o tamper até o café parar de ceder.` });
+          if (yieldG) opts.push({ t: `Passa menos água: ~${fmtN(yieldG - 4)} g na xícara`, d: `Corta o shot um pouco antes (era ${fmtN(yieldG)} g). Menos água = menos ácido aguado.` });
+          if (doseG) opts.push({ t: `Sobe a dose pra ${fmtN(doseG + 0.5)} g`, d: "Mais café na cesta segura o fluxo e dá mais corpo." });
+          if (temp) opts.push({ t: `Água mais quente: ${fmtN(temp + 1, 0)} °C`, d: "Um grau a mais já extrai mais doçura." });
+        } else {
+          if (tS && tS > 34) opts.push({ t: `Baixa a dose pra ${fmtN((doseG || 18) - 0.5)} g`, d: `O shot demorou (${fmtTime(tS)}): menos café na cesta deixa a água passar melhor.` });
+          if (yieldG) opts.push({ t: `Passa mais água: ~${fmtN(yieldG + 4)} g na xícara`, d: `Deixa sair um pouco mais (era ${fmtN(yieldG)} g) pra diluir o amargor.` });
+          opts.push({ t: "Tamper com menos força (e sempre reto)", d: "Compacta firme, mas sem socar nem bater na cesta depois." });
+          if (temp) opts.push({ t: `Água menos quente: ${fmtN(temp - 1, 0)} °C`, d: "Um grau a menos segura o amargor." });
+        }
+      } else {
+        if (problem === "under") {
+          if (waterG && doseG) opts.push({ t: `Usa menos água: ~${Math.round(waterG - doseG)} g`, d: `Proporção um pouco mais curta (era 1:${fmtN(waterG / doseG)}).` });
+          if (temp) opts.push({ t: `Água mais quente: ${fmtN(temp + 2, 0)} °C`, d: "Extrai mais doçura sem mudar a moagem." });
+          opts.push({ t: "Mais tempo de contato", d: "Despeja mais devagar ou deixa a infusão 20–30 s a mais." });
+        } else {
+          if (waterG && doseG) opts.push({ t: `Usa mais água: ~${Math.round(waterG + doseG)} g`, d: `Proporção um pouco mais longa (era 1:${fmtN(waterG / doseG)}).` });
+          if (temp) opts.push({ t: `Água menos quente: ${fmtN(temp - 2, 0)} °C`, d: "Segura o amargor." });
+          opts.push({ t: "Menos agitação / tempo", d: "Mexe menos e encurta um pouco o tempo total." });
+        }
+      }
+      const [main, ...rest] = opts;
+      return main ? { title: main.t, text: main.d + (rest.length ? ` Se não resolver: ${rest.slice(0, 2).map((o) => o.t.charAt(0).toLowerCase() + o.t.slice(1)).join(" ou ")}.` : "") + " Muda uma coisa por vez." } : null;
+    };
+    const fine = (problem) => (lever(problem) || {}).text || "";
+
+    // pode ir pra moagem vizinha? Não se ela já deu o problema contrário ou nota pior.
+    const neighbor = (step) => {
+      const v = cur + step, n = stats.find((x) => x.v === v);
+      const opposite = step < 0 ? "over" : "under";
+      const blocked = v <= 0 || (n && ((n[opposite] > 0 && n[opposite] * 2 >= n.n) || (n.avg != null && curS && curS.avg != null && n.avg < curS.avg - 0.3)));
+      return { v, n, blocked };
+    };
+
+    let target = null;
+    const decide = (problem) => {
+      const step = problem === "over" ? +1 : -1;
+      const w = problem === "over" ? overW : underW;
+      const word = problem === "over" ? "amargo/lento" : "ácido/aguado";
+      const dirWord = problem === "over" ? "mais grosso" : "mais fino";
+      const nb = neighbor(step);
+      const bestThatWay = best && (step > 0 ? best.v > cur : best.v < cur) && (!curS || curS.avg == null || best.avg > curS.avg) ? best : null;
+      if (bestThatWay) {
+        target = bestThatWay.v;
+        tips.push({ kind: "grind", title: `Volte pra ${grindLabel(g, target)}`, text: `Com ${target} suas notas foram melhores (média ${fmtN(bestThatWay.avg)}).`, why: `com ${cur} ficou ${word} · ${bestThatWay.n} ${bestThatWay.n === 1 ? "café" : "cafés"} com ${target}` });
+      } else if (nb.blocked) {
+        const why = nb.n ? `com ${nb.v} ${unit} você já achou ${problem === "over" ? "ácido/aguado" : "amargo/lento"} — ${cur} parece seu ponto, falta o ajuste fino` : `${dirWord} que ${cur} não dá`;
+        const lv = lever(problem);
+        tips.push({ kind: "fine", title: lv ? lv.title : `Fica no ${cur} e ajusta o resto`, text: (lv ? `Mantém ${cur} ${unit}. ` + lv.text : ""), why });
+      } else if (w >= 2.2) {
+        target = nb.v;
+        const why = [`com ${grindLabel(g, cur)} ficou ${word}${seen[problem] > 1 ? ` em ${seen[problem]} cafés` : ""}`];
+        if (problem === "over" && lastSig.slowShot) why.push(`o último shot levou ${fmtTime(last.time_s)}`);
+        if (problem === "under" && lastSig.fastShot) why.push(`o último shot saiu em ${fmtTime(last.time_s)}`);
+        if (problem === "over" && lastSig.highGauge) why.push("o ponteiro chegou no vermelho");
+        tips.push({ kind: "grind", title: `Testa 1 ${unit === "cliques" ? "clique" : "ponto"} ${dirWord}: ${grindLabel(g, target)}`, text: `Se passar do ponto pro outro lado, volta pro ${cur} e ajusta dose/água.`, why: why.join(" · ") });
+      } else {
+        const lv = lever(problem);
+        tips.push({ kind: "fine", title: lv ? lv.title : "Ajuste fino", text: (lv ? `Mantém ${cur} ${unit}. ` + lv.text : ""), why: `foi só um pouco ${problem === "over" ? "amargo" : "ácido"} — ainda não vale mudar os ${unit}` });
+      }
+    };
+
+    if (overW > underW && overW >= 0.7) decide("over");
+    else if (underW > overW && underW >= 0.7) decide("under");
+    else if (best && curS && best.v !== cur && curS.avg != null && best.avg - curS.avg >= 0.75) {
       target = best.v;
       tips.push({ kind: "grind", title: `Volte pra ${grindLabel(g, best.v)}`, text: `Seus cafés com ${best.v} tiveram nota média ${fmtN(best.avg)}, contra ${fmtN(curS.avg)} com ${cur}.`, why: `${best.n} ${best.n === 1 ? "café" : "cafés"} com ${best.v} · ${curS.n} com ${cur}` });
     }
@@ -763,7 +821,7 @@ function coachFor(coffeeId, methodId) {
     if ((score.channel || 0) >= 1) tips.push({ kind: "puck", title: "Capriche no WDT e nivele a cama", text: "Mexe bem o café com o WDT (até sumir os grumos), dá umas batidinhas pra assentar e nivela antes de compactar. Esguicho e canal quase sempre vêm de cama desigual.", why: `você anotou esguicho/canal em ${seen.channel} ${seen.channel === 1 ? "café" : "cafés"}` });
     else if ((score.wdt || 0) >= 1) tips.push({ kind: "puck", title: "Mais WDT", text: "Passa o WDT por mais tempo, com movimentos circulares até o fundo da cesta.", why: `grumos/WDT apareceram nas suas anotações ${seen.wdt}x` });
     if ((score.level || 0) >= 1) tips.push({ kind: "puck", title: "Nivele melhor antes do tamper", text: "Confere se o tamper desce reto: cama torta faz a água passar pelo lado mais baixo.", why: `desnível apareceu ${seen.level}x nas anotações` });
-    if ((score.tamp || 0) >= 1 && (score.under || 0) >= (score.over || 0)) tips.push({ kind: "puck", title: "Aperte o tamper com mais firmeza", text: "Compacta até o café parar de ceder, sempre com a mesma força, e reto.", why: "você comentou sobre a compactação e o café saiu do lado fraco" });
+    if ((score.tamp || 0) >= 1 && (score.under || 0) >= (score.over || 0) && !tips.some((t) => /tamper/i.test(t.title))) tips.push({ kind: "puck", title: "Aperte o tamper com mais firmeza", text: "Compacta até o café parar de ceder, sempre com a mesma força, e reto.", why: "você comentou sobre a compactação e o café saiu do lado fraco" });
   }
 
   // 3) proporção / água (coados e imersão)
@@ -818,7 +876,7 @@ function viewHome() {
   const low = active.filter((c) => { const st = stock(c.id); const dose = avg(brewsOf(c.id).map((b) => num(b.dose_g)).filter(Boolean)) || 18; return st.remaining < dose * 2.5; });
   const heroBags = active.slice(0, 3);
   const coach = coachFor();
-  const mainTip = coach && coach.tips.find((t) => t.kind === "grind") || (coach && coach.tips[0]);
+  const mainTip = coach && (coach.tips.find((t) => t.kind === "grind" || t.kind === "fine") || coach.tips[0]);
 
   const html = `<div class="page">
     <section class="hero">

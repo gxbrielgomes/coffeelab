@@ -40,12 +40,8 @@ async function refresh() {
 const METHODS = [
   { id: "espresso", name: "Espresso", kind: "espresso" },
   { id: "v60", name: "V60", kind: "pour" },
-  { id: "kalita", name: "Kalita", kind: "pour" },
-  { id: "chemex", name: "Chemex", kind: "pour" },
-  { id: "melitta", name: "Melitta", kind: "pour" },
   { id: "prensa", name: "Prensa", kind: "immersion" },
   { id: "moka", name: "Moka", kind: "moka" },
-  { id: "aeropress", name: "AeroPress", kind: "immersion" },
   { id: "clever", name: "Clever", kind: "immersion" },
   { id: "coldbrew", name: "Cold Brew", kind: "cold" },
   { id: "outro", name: "Outro", kind: "pour" },
@@ -57,8 +53,8 @@ const DEFAULT_RATIO = { espresso: 2, v60: 16, kalita: 16, chemex: 16, melitta: 1
 const ROASTS = ["Clara", "Média-clara", "Média", "Média-escura", "Escura"];
 const ROAST_COLORS = ["#c99463", "#a26a3c", "#7a4a26", "#4f2e17", "#2a170c"];
 
-const BAG_COLORS = ["#1b1714", "#efe6d8", "#a86b3c", "#6b3f20", "#c9b79c", "#3a4a3b", "#2f3e52", "#8a2f2a", "#d9a55a"];
-const LABEL_COLORS = ["#efe6d8", "#1b1714", "#a86b3c", "#f6f1ea", "#c88f5a"];
+const BAG_COLORS = ["#8b5a32", "#a86b3c", "#6b3f20", "#d63a2b", "#f0811f", "#e9b44c", "#3f7a68", "#2d5d7b", "#8e2219"];
+const LABEL_COLORS = ["#f3e6c8", "#14100d", "#d63a2b", "#e9b44c", "#f0811f"];
 const SHAPES = [
   { id: "pouch", name: "Stand-up" },
   { id: "box", name: "Fundo reto" },
@@ -68,6 +64,42 @@ const SHAPES = [
 
 const FLAVORS = ["Chocolate", "Caramelo", "Nozes", "Mel", "Frutado", "Frutas vermelhas", "Cítrico", "Floral", "Especiarias", "Baunilha", "Doce", "Encorpado", "Sedoso", "Equilibrado", "Ácido demais", "Amargo", "Aguado", "Adstringente", "Queimado", "Terroso"];
 const SENSORY = [["acidez", "Acidez"], ["docura", "Doçura"], ["corpo", "Corpo"], ["amargor", "Amargor"]];
+// posição do ponteiro do manômetro, como num relógio (12h = centro)
+const PRESSURE_ZONES = [
+  ["10h", "10h", "bem baixo"], ["11h", "11h", ""], ["12h", "12h", "centro"], ["13h", "13h", ""],
+  ["14h", "14h", ""], ["14h30", "14h30", ""], ["15h", "15h", ""], ["16h", "16h", "alto"], ["fim", "No fim", "engasgou"],
+];
+const PRESSURE_LABEL = Object.assign({ baixo: "Abaixo da faixa", ideal: "Na faixa ideal", alto: "Acima da faixa", limite: "No limite" },
+  Object.fromEntries(PRESSURE_ZONES.map(([k, l]) => [k, l === "No fim" ? l : "Ponteiro às " + l])));
+// ponteiro em "horas" (12 = centro). Escala de 8h até 16h; vermelho de 15h pra frente.
+const GAUGE_MIN = 8, GAUGE_MAX = 16, GAUGE_RED = 15;
+function fmtHour(h) { if (h == null) return "—"; const H = Math.floor(h), m = Math.round((h - H) * 60); return H + "h" + (m ? String(m).padStart(2, "0") : ""); }
+function oldZoneToHour(z) { return { baixo: 10.5, ideal: 12, alto: 13.5, limite: 15.5, fim: 16 }[z] ?? (/^(\d+)h(\d*)$/.test(z || "") ? +RegExp.$1 + (+RegExp.$2 || 0) / 60 : null); }
+function brewGauge(b) { return b.pressure_h != null ? num(b.pressure_h) : b.pressure_zone ? oldZoneToHour(b.pressure_zone) : null; }
+function gaugeSVG(h, opts) {
+  opts = opts || {};
+  const cx = 150, cy = 150, R = 118;
+  const pt = (hour, r) => { const a = ((hour - 12) * 30 - 90) * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; };
+  const arc = (h1, h2, r) => { const [x1, y1] = pt(h1, r), [x2, y2] = pt(h2, r); const large = (h2 - h1) * 30 > 180 ? 1 : 0; return `M${x1.toFixed(1)} ${y1.toFixed(1)} A${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`; };
+  let ticks = "";
+  for (let t = GAUGE_MIN; t <= GAUGE_MAX + 1e-9; t += 0.5) {
+    const major = Math.abs(t - Math.round(t)) < 1e-9, [x1, y1] = pt(t, R - (major ? 14 : 7)), [x2, y2] = pt(t, R);
+    ticks += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${t >= GAUGE_RED ? "#d63a2b" : "#a69c90"}" stroke-width="${major ? 2.4 : 1.2}" opacity="${major ? 0.9 : 0.45}"/>`;
+  }
+  const val = h == null ? null : clamp(h, GAUGE_MIN, GAUGE_MAX);
+  const [nx, ny] = pt(val == null ? 12 : val, R - 14);
+  const hint = opts.mini ? "" : `<text x="${cx}" y="${cy + 104}" text-anchor="middle" font-size="13" fill="#8a7a60" font-family="-apple-system,sans-serif">${val == null ? "arraste até onde o ponteiro chegou" : val >= GAUGE_RED ? "chegou no vermelho" : ""}</text>`;
+  return `<svg viewBox="${opts.mini ? "10 20 280 250" : "0 0 300 262"}" class="gauge" style="width:100%;max-width:${opts.mini ? 120 : 340}px;${opts.mini ? "" : "touch-action:none;cursor:grab;"}user-select:none">
+    <path d="${arc(GAUGE_MIN, GAUGE_MAX, R + 8)}" stroke="rgba(255,255,255,.07)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="${arc(GAUGE_RED, GAUGE_MAX, R + 8)}" stroke="#d63a2b" stroke-width="10" fill="none" stroke-linecap="round" opacity=".85"/>
+    ${val != null ? `<path d="${arc(GAUGE_MIN, val, R + 8)}" stroke="${val >= GAUGE_RED ? "#d63a2b" : "#f0811f"}" stroke-width="10" fill="none" stroke-linecap="round"/>` : ""}
+    ${ticks}
+    <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${val == null ? "#6f675d" : "#f3e6c8"}" stroke-width="${opts.mini ? 7 : 4}" stroke-linecap="round" ${val == null ? 'stroke-dasharray="4 6"' : ""}/>
+    <circle cx="${cx}" cy="${cy}" r="${opts.mini ? 16 : 11}" fill="#1d1914" stroke="#f3e6c8" stroke-width="2.5"/>
+    ${hint}
+  </svg>`;
+}
+
 const PROCESSES = ["Natural", "Lavado", "Cereja descascado", "Honey", "Fermentado", "Anaeróbico", "Outro"];
 
 const POUR_STAGES = [
@@ -220,57 +252,68 @@ let svgUid = 0;
  * Desenha o saquinho. ratio = 0..1 do quanto ainda tem. Ele esmaece e a
  * janelinha mostra o nível dos grãos.
  */
-function bagSVG(av, opts) {
-  av = Object.assign({ shape: "pouch", color: "#1b1714", label: "#efe6d8", roast: 3, initials: "" }, av || {});
-  opts = Object.assign({ ratio: 1, count: 1, fade: true }, opts || {});
-  const u = "b" + ++svgUid;
-  const ratio = clamp(opts.ratio, 0, 1);
-  const body = av.color, dark = shade(body, -0.35), light = shade(body, 0.18);
-  const bean = ROAST_COLORS[clamp((av.roast | 0) - 1, 0, 4)];
-  const ink = isLight(av.label) ? "#1b1714" : "#f3ede4";
-  const opacity = opts.fade ? 0.28 + 0.72 * Math.pow(ratio, 0.8) : 1;
-  const ini = esc((av.initials || "").slice(0, 3).toUpperCase());
-
-  let shapeEl, label, win, extra = "";
-  if (av.shape === "tin") {
-    shapeEl = `<rect x="18" y="26" width="84" height="116" rx="10" fill="url(#g${u})"/><rect x="14" y="16" width="92" height="16" rx="6" fill="${dark}"/><rect x="14" y="16" width="92" height="5" rx="2.5" fill="${light}" opacity=".5"/>`;
-    label = { x: 26, y: 52, w: 68, h: 70 };
-  } else if (av.shape === "box") {
-    shapeEl = `<path d="M22 30 L98 30 L102 142 L18 142 Z" fill="url(#g${u})"/><path d="M22 30 L32 14 L88 14 L98 30 Z" fill="${dark}"/><path d="M32 14h56" stroke="${light}" stroke-width="2" opacity=".6"/><path d="M60 30 L60 142" stroke="${dark}" stroke-width="0.8" opacity=".35"/>`;
-    label = { x: 30, y: 52, w: 60, h: 72 };
-  } else if (av.shape === "kraft") {
-    shapeEl = `<path d="M20 34 Q20 26 26 26 L94 26 Q100 26 100 34 L104 136 Q104 144 96 144 L24 144 Q16 144 16 136 Z" fill="url(#g${u})"/><path d="M24 12 h72 v18 h-72z" fill="${dark}"/><path d="M24 18 h72 M24 24 h72" stroke="${light}" stroke-width="1.2" opacity=".35"/><rect x="40" y="8" width="40" height="7" rx="3.5" fill="${shade(body, -0.5)}"/>`;
-    label = { x: 30, y: 56, w: 60, h: 64 };
-  } else {
-    shapeEl = `<path d="M24 20 Q24 14 30 14 L90 14 Q96 14 96 20 L100 132 Q102 144 88 144 L32 144 Q18 144 20 132 Z" fill="url(#g${u})"/><path d="M24 26 h72" stroke="${dark}" stroke-width="1.5" opacity=".7"/><circle cx="60" cy="38" r="5" fill="${dark}" opacity=".8"/><circle cx="60" cy="38" r="2" fill="${light}" opacity=".6"/>`;
-    label = { x: 32, y: 52, w: 56, h: 70 };
-    extra = `<path d="M30 140 Q60 128 90 140" stroke="${dark}" stroke-width="1" fill="none" opacity=".5"/>`;
+// quebra o nome do café em até 4 linhas que caibam na etiqueta
+function wrapName(name) {
+  const words = String(name || "").toUpperCase().trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return { lines: [], size: 10 };
+  for (const [max, size] of [[6, 11], [8, 9], [10, 7.5], [13, 6]]) {
+    const lines = []; let cur = "";
+    words.forEach((w) => {
+      if (!cur) cur = w;
+      else if ((cur + " " + w).length <= max) cur += " " + w;
+      else { lines.push(cur); cur = w; }
+    });
+    if (cur) lines.push(cur);
+    if (lines.length <= 4 && lines.every((l) => l.length <= max + 1)) return { lines, size };
   }
-  const L = label;
-  const winH = 20, winY = L.y + L.h - winH - 8, winX = L.x + 8, winW = L.w - 16;
-  const fillH = winH * ratio;
-  win = `
-    <rect x="${winX}" y="${winY}" width="${winW}" height="${winH}" rx="4" fill="${shade(av.label, -0.12)}" opacity=".9"/>
-    <clipPath id="c${u}"><rect x="${winX}" y="${winY}" width="${winW}" height="${winH}" rx="4"/></clipPath>
-    <g clip-path="url(#c${u})">
-      <rect x="${winX}" y="${winY + winH - fillH}" width="${winW}" height="${fillH}" fill="${bean}"/>
-      ${ratio > 0 ? beans(winX, winY + winH - fillH, winW, fillH, bean) : ""}
-    </g>
-    <rect x="${winX}" y="${winY}" width="${winW}" height="${winH}" rx="4" fill="none" stroke="${shade(av.label, -0.3)}" stroke-width=".8"/>`;
+  return { lines: words.slice(0, 4).map((w) => w.slice(0, 14)), size: 6.5 };
+}
 
+function bagSVG(av, opts) {
+  av = Object.assign({ color: "#8b5a32", label: "#f3e6c8", roast: 3, initials: "" }, av || {});
+  opts = Object.assign({ ratio: 1, count: 1, fade: true }, opts || {});
+  const u = "b" + ++svgUid, seed = (svgUid * 7) % 97;
+  const ratio = clamp(opts.ratio, 0, 1);
+  const O = "#0d0a08";
+  const body = av.color, empty = shade(body, -0.55), fold = shade(body, -0.3), hi = shade(body, 0.35), lo = shade(body, -0.35);
+  const nameLines = wrapName(opts.name || av.initials || "");
+  const ink = isLight(av.label) ? O : "#f3e6c8";
+  const top = 40, bot = 140, fillY = bot - (bot - top) * ratio;
+  const bodyPath = "M26 38 C40 37 80 39 94 38 C95 70 96 104 97 134 C97 140 93 141 90 140 C70 141 50 139 30 140 C25 141 23 139 23 134 C24 104 25 70 26 38 Z";
+  let dots = "";
+  for (let k = 0; k < 5; k++) dots += `<circle cx="${48 + k * 6}" cy="116" r="2.1" fill="${k < av.roast ? "#f3e6c8" : "none"}" stroke="${O}" stroke-width="1.4"/>`;
   const badge = opts.count > 1
-    ? `<g transform="translate(92 22)"><circle r="13" fill="#efe6d8"/><text text-anchor="middle" dy="4.5" font-size="12" font-weight="700" fill="#1b1714" font-family="-apple-system,sans-serif">×${opts.count}</text></g>` : "";
-
+    ? `<g transform="translate(100 22) rotate(8)" filter="url(#r${u})"><circle r="12" fill="#d63a2b" stroke="${O}" stroke-width="3"/><text text-anchor="middle" dy="4.3" font-size="11.5" font-weight="800" fill="#f3e6c8" font-family="-apple-system,sans-serif">×${opts.count}</text></g>` : "";
   return `<span class="bag-av"><svg viewBox="0 0 120 152" role="img" aria-label="saco de café">
-    <defs><linearGradient id="g${u}" x1="0" x2="1"><stop offset="0" stop-color="${light}"/><stop offset=".55" stop-color="${body}"/><stop offset="1" stop-color="${dark}"/></linearGradient></defs>
-    <g opacity="${opacity.toFixed(2)}">
-      ${shapeEl}${extra}
-      <rect x="${L.x}" y="${L.y}" width="${L.w}" height="${L.h}" rx="5" fill="${av.label}"/>
-      <text x="60" y="${L.y + 24}" text-anchor="middle" font-size="${ini.length > 2 ? 15 : 18}" font-weight="700" letter-spacing="1" fill="${ink}" font-family="ui-serif,'New York',Georgia,serif">${ini || "☕"}</text>
-      <rect x="${L.x + 14}" y="${L.y + 32}" width="${L.w - 28}" height="2" rx="1" fill="${ink}" opacity=".35"/>
-      ${roastDots(L, ink, av.roast)}
-      ${win}
-      <path d="M${L.x + 3} ${L.y + 2} v${L.h - 4}" stroke="#fff" stroke-width="3" opacity=".08" stroke-linecap="round"/>
+    <defs>
+      <filter id="r${u}" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="${seed}"/><feDisplacementMap in="SourceGraphic" scale="2.6"/></filter>
+      <pattern id="h${u}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><path d="M0 1.5 h3.5 M2 4.5 h3" stroke="${hi}" stroke-width="1.1" stroke-linecap="round" opacity=".55"/></pattern>
+      <pattern id="d${u}" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><path d="M0 2 h4" stroke="${lo}" stroke-width="1.2" stroke-linecap="round" opacity=".6"/></pattern>
+      <clipPath id="c${u}"><path d="${bodyPath}"/></clipPath>
+    </defs>
+    <g filter="url(#r${u})" stroke-linejoin="round" stroke-linecap="round">
+      <path d="${bodyPath}" fill="${empty}"/>
+      <g clip-path="url(#c${u})">
+        <rect x="0" y="${fillY.toFixed(1)}" width="120" height="${(152 - fillY).toFixed(1)}" fill="${body}"/>
+        <rect x="0" y="${fillY.toFixed(1)}" width="120" height="${(152 - fillY).toFixed(1)}" fill="url(#h${u})"/>
+        <rect x="74" y="0" width="40" height="152" fill="url(#d${u})"/>
+        ${ratio > 0 && ratio < 1 ? `<path d="M18 ${fillY.toFixed(1)} C40 ${(fillY - 2).toFixed(1)} 80 ${(fillY + 2).toFixed(1)} 102 ${fillY.toFixed(1)}" stroke="${O}" stroke-width="2.2" fill="none"/>` : ""}
+        <path d="M31 50 C29 80 29 110 31 130" stroke="#fff6e2" stroke-width="3" opacity=".55" fill="none"/>
+      </g>
+      <path d="M38 42 C37 74 38 106 38 136 M82 42 C83 74 82 106 82 136" stroke="${O}" stroke-width="1.6" opacity=".55" fill="none"/>
+      <path d="${bodyPath}" fill="none" stroke="${O}" stroke-width="3.8"/>
+      <!-- dobra do topo + arame -->
+      <path d="M28 16 C45 15 75 17 92 16 L94 38 C75 39 45 37 26 38 Z" fill="${fold}" stroke="${O}" stroke-width="3.6"/>
+      <path d="M34 20 l3 14 M46 19 l2 15 M60 19 l1 15 M74 19 l-1 15 M86 20 l-2 14" stroke="${O}" stroke-width="1.2" opacity=".45"/>
+      <path d="M17 29 C40 27 80 31 103 28" stroke="${O}" stroke-width="8" fill="none"/>
+      <path d="M18 29 C40 27 80 31 102 28" stroke="#f3e6c8" stroke-width="4" fill="none"/>
+      <!-- etiqueta -->
+      <g transform="rotate(-4 60 82)">
+        <path d="M33 58 C48 57 72 59 87 58 C88 73 87 89 87 104 C72 105 48 103 33 104 C32 89 33 73 33 58 Z" fill="${av.label}" stroke="${O}" stroke-width="3"/>
+        <path d="M37 62 l8 -2 M77 100 l7 -1" stroke="${O}" stroke-width="1" opacity=".35"/>
+        <text text-anchor="middle" font-size="${nameLines.size}" fill="${ink}" font-family="'Bowlby One','Futura Condensed ExtraBold',Impact,'Arial Black',sans-serif" letter-spacing=".2">${nameLines.lines.map((l, k) => `<tspan x="60" y="${(81 - (nameLines.lines.length - 1) * nameLines.size * 0.55 + k * nameLines.size * 1.1 + nameLines.size * 0.35).toFixed(1)}"${l.length * nameLines.size * 0.74 > 46 ? ' textLength="46" lengthAdjust="spacingAndGlyphs"' : ""}>${esc(l)}</tspan>`).join("") || `<tspan x="60" y="86">☕</tspan>`}</text>
+      </g>
+      ${dots}
     </g>
     ${badge}
   </svg></span>`;
@@ -294,7 +337,7 @@ function beans(x, y, w, h, color) {
 }
 function coffeeAvatar(c, size) {
   const st = stock(c.id);
-  return bagSVG(c.avatar, { ratio: st.count ? st.ratio : 0, count: st.count });
+  return bagSVG(c.avatar, { name: c.name,  ratio: st.count ? st.ratio : 0, count: st.count });
 }
 function initialsOf(name) {
   return (name || "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -421,18 +464,38 @@ function timerPresetFromMethod(methodId) {
   return { mode: "free", target: null };
 }
 
+// metas de água por etapa do coado guiado (bloom = ~2,5x a dose)
+function pourTargets(water, dose) {
+  if (!water) return null;
+  dose = dose || water / 16;
+  const bloom = Math.round(Math.min(dose * 2.5, water * 0.25));
+  return [bloom, Math.round(water * 0.5), Math.round(water * 0.75), Math.round(water), Math.round(water), Math.round(water)];
+}
+// xícara desejada (ml) + proporção → dose e água (o pó segura ~2 g de água por g de café)
+function pourPlanFromCup(ml, ratio) {
+  ml = num(ml); ratio = num(ratio, 16);
+  if (!ml || ratio <= 2.5) return null;
+  const dose = round(ml / (ratio - 2), 1);
+  return { ml, ratio, dose, water: Math.round(dose * ratio) };
+}
+
 function openTimer(opts) {
   opts = opts || {};
   if (opts.mode) Timer.setMode(opts.mode, opts.target);
   if (opts.water) Timer.waterTarget = opts.water;
+  if (opts.dose) Timer.doseTarget = opts.dose;
+  const defRatio = (S.settings.ratios || {}).v60 || DEFAULT_RATIO.v60;
+  let plan = opts.water && opts.dose ? { ml: Math.round(opts.water - 2 * opts.dose), ratio: round(opts.water / opts.dose, 1), dose: opts.dose, water: opts.water }
+    : pourPlanFromCup(S.settings.pour_ml || 250, defRatio);
+  if (plan && !opts.water) { Timer.waterTarget = plan.water; Timer.doseTarget = plan.dose; }
   const root = $("#timerRoot");
   root.hidden = false;
   const presets = [
-    ["free", "Livre", null], ["espresso", "Espresso", 28], ["pour", "Coado guiado", 195], ["immersion", "Prensa 4:00", 240], ["immersion", "AeroPress 2:00", 120],
+    ["free", "Livre", null], ["espresso", "Espresso", 28], ["pour", "Coado guiado", 195], ["immersion", "Prensa 4:00", 240],
   ];
   root.innerHTML = `
     <div class="timer-top">
-      <span class="eyebrow">Timer</span>
+      <span class="eyebrow ribbon">Timer</span>
       <button class="close-x" data-x aria-label="Fechar">${ic("x")}</button>
     </div>
     <div class="timer-ring">
@@ -451,7 +514,34 @@ function openTimer(opts) {
     </div>
     ${opts.onUse ? `<button class="btn cream" id="tUse" style="margin-top:22px">Usar este tempo no registro</button>` : ""}
     <div class="timer-presets">${presets.map(([m, l, t]) => `<button class="chip ${Timer.mode === m && Timer.target === t ? "on" : ""}" data-m="${m}" data-t="${t || ""}">${l}</button>`).join("")}</div>
-    <div class="timer-laps lap-list" id="tLaps"></div>`;
+    <div class="timer-laps lap-list" id="tLaps"></div>
+    <aside class="pour-panel" id="pourPanel"></aside>`;
+  const drawPanel = () => {
+    const pp = $("#pourPanel"); if (!pp) return;
+    pp.hidden = Timer.mode !== "pour";
+    if (pp.hidden) return;
+    const tg = plan ? pourTargets(plan.water, plan.dose) : null;
+    const t = Timer.now(), cur = POUR_STAGES.reduce((acc, s, idx) => (t >= s.t ? idx : acc), 0);
+    if (!pp.dataset.built) {
+      pp.dataset.built = "1";
+      pp.innerHTML = `<div class="eyebrow ribbon">Quanto você quer passar?</div>
+        <div class="form-grid" style="margin-top:12px">
+          <div class="field"><label>Na xícara</label><div class="input-unit"><input class="input" id="pMl" type="number" inputmode="numeric" value="${plan ? plan.ml : ""}"><span class="unit">ml</span></div></div>
+          <div class="field"><label>Proporção</label><div class="input-unit"><input class="input" id="pRatio" type="number" step="0.5" inputmode="decimal" value="${plan ? plan.ratio : defRatio}"><span class="unit">1:</span></div></div>
+        </div>
+        <div class="pour-result" id="pRes"></div>
+        <div class="pour-steps" id="pSteps"></div>`;
+      const upd = () => {
+        plan = pourPlanFromCup($("#pMl").value, $("#pRatio").value);
+        Timer.waterTarget = plan ? plan.water : null; Timer.doseTarget = plan ? plan.dose : null;
+        drawPanel(); Timer.emit();
+        clearTimeout(drawPanel._t); drawPanel._t = setTimeout(() => plan && api.put("/api/settings", { pour_ml: plan.ml }).then(() => (S.settings.pour_ml = plan.ml)).catch(() => {}), 800);
+      };
+      $("#pMl").oninput = upd; $("#pRatio").oninput = upd;
+    }
+    $("#pRes").innerHTML = plan ? `<div><span>Moa</span><b>${fmtN(plan.dose)} g</b></div><div><span>Água total</span><b>${plan.water} g</b></div>` : `<p class="small muted">Digite quantos ml você quer.</p>`;
+    $("#pSteps").innerHTML = tg ? POUR_STAGES.slice(0, 4).map((s, i) => `<div class="${i === cur ? "on" : i < cur ? "done" : ""}"><span>${fmtTime(s.t)}</span><span>${s.label}</span><b>até ${tg[i]} g</b></div>`).join("") + `<div class="${cur >= 4 ? "on" : ""}"><span>${fmtTime(POUR_STAGES[4].t)}</span><span>Drenar</span><b>~${fmtTime(POUR_STAGES[5].t)}</b></div>` : "";
+  };
   const C = 2 * Math.PI * 92;
   const draw = () => {
     const t = Timer.now(), f = fmtTimer(t);
@@ -469,7 +559,8 @@ function openTimer(opts) {
     if (Timer.mode === "pour") {
       const i = POUR_STAGES.reduce((acc, s, idx) => (t >= s.t ? idx : acc), 0);
       const s = POUR_STAGES[i], n = POUR_STAGES[i + 1];
-      const w = Timer.waterTarget ? ` · até ${Math.round(Timer.waterTarget * s.pct)} g` : "";
+      const tg = pourTargets(Timer.waterTarget, Timer.doseTarget);
+      const w = tg ? ` · até ${tg[i]} g` : "";
       stage = `<div class="now">${s.label}${s.t < 150 ? w : ""}</div>${n ? `<div class="next">próximo: ${n.label} em ${fmtTime(n.t - t)}</div>` : ""}`;
     } else if (Timer.mode === "espresso") {
       stage = `<div class="now">${t < 25 ? "Extraindo…" : t <= 32 ? "Ponto ideal" : "Passou do ponto"}</div><div class="next">alvo 25–32 s</div>`;
@@ -480,7 +571,9 @@ function openTimer(opts) {
     $("#tStage").innerHTML = stage;
     $("#tLaps").innerHTML = Timer.laps.map((l, i) => `<div><span>Etapa ${i + 1}</span><span>${fmtTimer(l).main}${fmtTimer(l).dec}</span></div>`).reverse().join("");
   };
-  const off = Timer.on(draw); draw();
+  let lastStageShown = -2;
+  const drawAll = () => { draw(); const t = Timer.now(), cur = POUR_STAGES.reduce((a, s, idx) => (t >= s.t ? idx : a), 0); if (cur !== lastStageShown || !Timer.running) { lastStageShown = cur; drawPanel(); } };
+  const off = Timer.on(drawAll); drawAll();
   const close = () => { off(); root.hidden = true; root.innerHTML = ""; document.removeEventListener("keydown", onKey); };
   const onKey = (e) => {
     if (e.key === "Escape") close();
@@ -495,7 +588,7 @@ function openTimer(opts) {
     Timer.reset(); Timer.setMode(b.dataset.m, num(b.dataset.t) || null);
     $$("[data-m]", root).forEach((x) => x.classList.toggle("on", x === b));
   }));
-  if (opts.onUse) $("#tUse").onclick = () => { Timer.pause(); opts.onUse(Timer.now(), Timer.laps.slice()); close(); };
+  if (opts.onUse) $("#tUse").onclick = () => { Timer.pause(); opts.onUse(Timer.now(), Timer.laps.slice(), Timer.mode === "pour" ? plan : null); close(); };
 }
 
 /* ===================================================================
@@ -552,6 +645,162 @@ window.addEventListener("hashchange", () => { render(); window.scrollTo({ top: 0
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 
 /* ===================================================================
+   TREINADOR — dicas pro próximo café com base no seu histórico
+   Lê: anotações, sabores marcados, tempo, manômetro, moagem e notas.
+   =================================================================== */
+const norm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+const SIGNALS = {
+  under: /(acid[oa]\b|acidez (alta|demais|forte|agressiva)|muito acid|azed|aguad|ralo|sem corpo|salgad|rapid|correu|sub.?extra|faltou corpo|fino demais nao)/,
+  over: /(amarg|queimad|adstring|amarrad|\bseco\b|demor|\blent[oa]\b|engasg|pingand|travou|sobre.?extra)/,
+  channel: /(esguich|canal|channel|jato|espirr|desigual|buraco|furo|vazou pelo lado)/,
+  wdt: /(wdt|grumo|empelot|torr[aã]o de cafe|aglomer)/,
+  tamp: /(tamp|compact|socad)/,
+  level: /(nivel|desnivel|torto|inclinad)/,
+  strong: /(forte demais|muito forte|intenso demais|pesad|concentrad)/,
+  weak: /(fraco|aguad|ralo|sem graca|sem sabor)/,
+  hot: /(quente demais|muito quente|queimou)/,
+};
+const FLAVOR_SIGNALS = { "Ácido demais": "under", "Aguado": "under", "Amargo": "over", "Adstringente": "over", "Queimado": "over" };
+
+function brewSignals(b) {
+  const t = norm(b.notes), sig = {};
+  Object.entries(SIGNALS).forEach(([k, re]) => { if (re.test(t)) sig[k] = true; });
+  (b.flavors || []).forEach((f) => { if (FLAVOR_SIGNALS[f]) sig[FLAVOR_SIGNALS[f]] = true; });
+  const m = METHOD[b.method] || {};
+  if (m.kind === "espresso" && b.time_s) { if (b.time_s < 22) sig.under = sig.fastShot = true; if (b.time_s > 35) sig.over = sig.slowShot = true; }
+  const gz = brewGauge(b);
+  if (m.kind === "espresso" && gz != null && gz >= GAUGE_RED + 0.5) sig.over = sig.highGauge = true;
+  // "mais fino"/"mais grosso" escrito pelo próprio usuário
+  if (/mais fin|moer fin|afinar/.test(t)) sig.wantFiner = true;
+  if (/mais gross|moer gross|engross|abrir (a )?moagem/.test(t)) sig.wantCoarser = true;
+  return sig;
+}
+
+function nextNote(b) {
+  const raw = String(b.notes || ""), t = norm(raw);
+  const i = t.search(/(proxim[ao]|da proxima|na proxima|tentar|testar|vou tentar)/);
+  if (i < 0) return null;
+  return raw.slice(i, i + 140).trim();
+}
+
+function grindLabel(g, val) { return `${String(val).replace(".", ",")} ${g && g.unit ? g.unit : "cliques"}`; }
+
+/**
+ * Gera dicas pro par café+método (ou o mais provável se não passar nada).
+ * Retorna { coffee, method, grinder, grind (sugestão), tips: [{title, text, why}] }
+ */
+function coachFor(coffeeId, methodId) {
+  const all = sortedBrews();
+  if (!all.length) return null;
+  if (!coffeeId || !methodId) {
+    const lastAvail = all.find((b) => stock(b.coffee_id).count > 0) || all[0];
+    coffeeId = coffeeId || lastAvail.coffee_id; methodId = methodId || lastAvail.method;
+  }
+  const m = METHOD[methodId] || METHOD.outro, isEsp = m.kind === "espresso";
+  let pool = all.filter((b) => b.coffee_id === coffeeId && b.method === methodId);
+  const sameCoffee = pool.length > 0;
+  if (!pool.length) pool = all.filter((b) => b.method === methodId);
+  if (!pool.length) return null;
+  const recent = pool.slice(0, 8);
+  const last = recent[0];
+  const g = equipById(last.grinder_id);
+  const tips = [];
+  const out = { coffee: coffeeById(coffeeId), method: m, grinder: g, grind: null, sameCoffee, tips };
+
+  // contagem dos sinais nos últimos preparos (peso maior pros mais recentes e pros mal avaliados)
+  const score = {}; const seen = {};
+  recent.forEach((b, i) => {
+    const w = (i < 3 ? 1.5 : 1) * (b.rating != null && num(b.rating) < 7 ? 1.4 : 1);
+    Object.keys(brewSignals(b)).forEach((k) => { score[k] = (score[k] || 0) + w; seen[k] = (seen[k] || 0) + 1; });
+  });
+  const lastSig = brewSignals(last);
+
+  // 0) lembrete do que você mesmo anotou pra próxima
+  const nn = nextNote(last);
+  if (nn) tips.push({ kind: "note", title: "Você deixou um recado pra hoje", text: `“${nn}”`, why: `anotado no seu último ${m.name.toLowerCase()} (${fmtDayLabel(brewTime(last)).toLowerCase()})` });
+
+  // 1) moagem: compara notas por valor de moagem no mesmo moedor
+  if (g && last.grind != null && last.grind !== "") {
+    const sameG = pool.filter((b) => b.grinder_id === g.id && b.grind != null && b.grind !== "");
+    const groups = {};
+    sameG.forEach((b) => { const k = num(b.grind); (groups[k] = groups[k] || []).push(b); });
+    const stats = Object.entries(groups).map(([k, bs]) => {
+      const rated = bs.filter((b) => b.rating != null);
+      const sig = bs.map(brewSignals);
+      return { v: num(k), n: bs.length, avg: avg(rated.map((b) => num(b.rating))), under: sig.filter((s) => s.under).length, over: sig.filter((s) => s.over).length };
+    });
+    const cur = num(last.grind);
+    const curS = stats.find((s) => s.v === cur);
+    const best = stats.filter((s) => s.avg != null).sort((a, b) => b.avg - a.avg || b.n - a.n)[0];
+    const overW = (score.over || 0) + (lastSig.wantCoarser ? 3 : 0);
+    const underW = (score.under || 0) + (lastSig.wantFiner ? 3 : 0);
+    let target = null, why = [];
+    if (overW > underW && overW >= 1.4) {
+      target = cur + 1;
+      const better = stats.filter((s) => s.v > cur && s.avg != null && (!curS || curS.avg == null || s.avg > curS.avg)).sort((a, b) => b.avg - a.avg)[0];
+      if (better) target = better.v;
+      why.push(`com ${grindLabel(g, cur)} apareceu amargor/extração lenta${seen.over > 1 ? ` em ${seen.over} cafés` : ""}`);
+      if (lastSig.slowShot) why.push(`o último shot levou ${fmtTime(last.time_s)}`);
+      if (lastSig.highGauge) why.push("o ponteiro chegou no vermelho");
+      tips.push({ kind: "grind", title: `Moa um pouco mais grosso: ${grindLabel(g, target)}`, text: `Hoje tenta ${grindLabel(g, target)} no ${g.name} em vez de ${cur}.`, why: why.join(" · ") });
+    } else if (underW > overW && underW >= 1.4) {
+      target = cur - 1;
+      const better = stats.filter((s) => s.v < cur && s.avg != null && (!curS || curS.avg == null || s.avg > curS.avg)).sort((a, b) => b.avg - a.avg)[0];
+      if (better) target = better.v;
+      why.push(`com ${grindLabel(g, cur)} ficou ácido/aguado${seen.under > 1 ? ` em ${seen.under} cafés` : ""}`);
+      if (lastSig.fastShot) why.push(`o último shot saiu em ${fmtTime(last.time_s)}`);
+      tips.push({ kind: "grind", title: `Moa um pouco mais fino: ${grindLabel(g, target)}`, text: `Hoje tenta ${grindLabel(g, target)} no ${g.name} em vez de ${cur}.`, why: why.join(" · ") });
+    } else if (best && curS && best.v !== cur && curS.avg != null && best.avg - curS.avg >= 0.75 && best.n >= 1) {
+      target = best.v;
+      tips.push({ kind: "grind", title: `Volte pra ${grindLabel(g, best.v)}`, text: `Seus cafés com ${best.v} tiveram nota média ${fmtN(best.avg)}, contra ${fmtN(curS.avg)} com ${cur}.`, why: `${best.n} ${best.n === 1 ? "café" : "cafés"} com ${best.v} · ${curS.n} com ${cur}` });
+    }
+    if (target != null && target > 0) out.grind = target;
+  }
+
+  // 2) preparo da cama (espresso): WDT / nivelar / tamper
+  if (isEsp) {
+    if ((score.channel || 0) >= 1) tips.push({ kind: "puck", title: "Capriche no WDT e nivele a cama", text: "Mexe bem o café com o WDT (até sumir os grumos), dá umas batidinhas pra assentar e nivela antes de compactar. Esguicho e canal quase sempre vêm de cama desigual.", why: `você anotou esguicho/canal em ${seen.channel} ${seen.channel === 1 ? "café" : "cafés"}` });
+    else if ((score.wdt || 0) >= 1) tips.push({ kind: "puck", title: "Mais WDT", text: "Passa o WDT por mais tempo, com movimentos circulares até o fundo da cesta.", why: `grumos/WDT apareceram nas suas anotações ${seen.wdt}x` });
+    if ((score.level || 0) >= 1) tips.push({ kind: "puck", title: "Nivele melhor antes do tamper", text: "Confere se o tamper desce reto: cama torta faz a água passar pelo lado mais baixo.", why: `desnível apareceu ${seen.level}x nas anotações` });
+    if ((score.tamp || 0) >= 1 && (score.under || 0) >= (score.over || 0)) tips.push({ kind: "puck", title: "Aperte o tamper com mais firmeza", text: "Compacta até o café parar de ceder, sempre com a mesma força, e reto.", why: "você comentou sobre a compactação e o café saiu do lado fraco" });
+  }
+
+  // 3) proporção / água (coados e imersão)
+  if (!isEsp && m.kind !== "cold") {
+    const dose = num(last.dose_g), water = num(last.water_g);
+    const ratio = dose && water ? water / dose : null;
+    if ((score.weak || 0) >= 1.4 && ratio) tips.push({ kind: "ratio", title: `Proporção menor: 1:${fmtN(Math.max(12, ratio - 1))}`, text: `Mais café ou menos água. Ex.: ${fmtN(dose + 1)} g de café pra ${fmtN(water)} g de água.`, why: `ficou fraco/aguado ${seen.weak}x · última foi 1:${fmtN(ratio)}` });
+    else if ((score.strong || 0) >= 1.4 && ratio) tips.push({ kind: "ratio", title: `Proporção maior: 1:${fmtN(ratio + 1)}`, text: `Um pouco mais de água: ${fmtN(Math.round(dose * (ratio + 1)))} g pra ${fmtN(dose)} g de café.`, why: `ficou forte demais ${seen.strong}x · última foi 1:${fmtN(ratio)}` });
+    if ((score.over || 0) >= 2 && num(last.temp_c) >= 94) tips.push({ kind: "temp", title: `Baixe a água pra ${num(last.temp_c) - 2} °C`, text: "Água um pouco menos quente segura o amargor.", why: `amargor recorrente com ${fmtN(last.temp_c, 0)} °C` });
+    if ((score.under || 0) >= 2 && last.temp_c && num(last.temp_c) <= 92) tips.push({ kind: "temp", title: `Suba a água pra ${num(last.temp_c) + 2} °C`, text: "Mais temperatura extrai mais doçura e corpo.", why: `ácido/aguado recorrente com ${fmtN(last.temp_c, 0)} °C` });
+  } else if (isEsp && (score.strong || 0) >= 1.4 && last.yield_g) {
+    tips.push({ kind: "ratio", title: `Tire um pouco mais de bebida: ${fmtN(num(last.yield_g) + 4)} g`, text: "Ratio mais longo deixa o espresso menos intenso.", why: `“forte demais” apareceu ${seen.strong}x` });
+  }
+
+  // 4) tá bom? mantém!
+  const good = recent.slice(0, 3).filter((b) => num(b.rating, 0) >= 8);
+  if (!tips.filter((t) => t.kind !== "note").length && good.length >= 2) {
+    tips.push({ kind: "keep", title: "Tá mandando bem, mantém a receita", text: recipeLine(good[0]), why: `${good.length} dos seus últimos 3 ficaram com nota ≥ 8` });
+  }
+  return out;
+}
+
+function coachCard(c, opts) {
+  opts = opts || {};
+  if (!c || !c.tips.length) return "";
+  const href = `#/preparar?cafe=${c.coffee ? c.coffee.id : ""}&metodo=${c.method.id}${c.grind != null ? "&moagem=" + encodeURIComponent(c.grind) : ""}`;
+  return `<div class="card coach">
+    <div class="row between" style="align-items:flex-start;gap:16px">
+      <div class="row" style="gap:14px;align-items:center"><img class="coach-av" src="avatar-v2.png" alt=""><div><div class="ribbon">Ajuste sugerido</div>
+      <div class="h3" style="margin-top:8px">${esc(c.method.name)}${c.coffee ? " com " + esc(c.coffee.name) : ""}</div></div></div>
+      ${opts.cta !== false ? `<a class="btn primary sm" href="${href}">Usar essa receita</a>` : ""}
+    </div>
+    <div class="coach-tips">${c.tips.slice(0, opts.max || 4).map((t) => `<div class="coach-tip"><b>${esc(t.title)}</b><span>${esc(t.text)}</span>${t.why ? `<small>por quê: ${esc(t.why)}</small>` : ""}</div>`).join("")}</div>
+  </div>`;
+}
+
+/* ===================================================================
    INÍCIO
    =================================================================== */
 function greeting() {
@@ -568,28 +817,34 @@ function viewHome() {
   const active = S.coffees.filter((c) => !c.archived && stock(c.id).count > 0);
   const low = active.filter((c) => { const st = stock(c.id); const dose = avg(brewsOf(c.id).map((b) => num(b.dose_g)).filter(Boolean)) || 18; return st.remaining < dose * 2.5; });
   const heroBags = active.slice(0, 3);
+  const coach = coachFor();
+  const mainTip = coach && coach.tips.find((t) => t.kind === "grind") || (coach && coach.tips[0]);
 
   const html = `<div class="page">
     <section class="hero">
+      <span class="star s1">✦</span><span class="star s2">✦</span><span class="star s3">✦</span>
       <a href="#/ajustes" class="btn icon sm ghost mobile-only" style="position:absolute;top:14px;right:14px" aria-label="Ajustes">${ic("gear")}</a>
       <div>
-        <div class="eyebrow">${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</div>
-        <h1 class="title">${greeting()}${name}.<br><em>Que café vai ser?</em></h1>
+        <div class="eyebrow ribbon">${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</div>
+        <h1 class="title">${greeting()}${name}.</h1>
+        ${mainTip ? `<p class="subtitle" style="color:var(--text)">Pro próximo ${esc(coach.method.name.toLowerCase())}: <b style="color:var(--leather-2)">${esc(mainTip.title.charAt(0).toLowerCase() + mainTip.title.slice(1))}</b>.</p>` : ""}
         <p class="subtitle">${today.length ? `Você já fez ${today.length} ${today.length === 1 ? "café" : "cafés"} hoje.` : brews.length ? "Ainda nenhum café hoje." : "Comece cadastrando o grão que você tem em casa."}</p>
         <div class="actions">
-          ${S.coffees.length ? `<a class="btn primary lg" href="#/preparar">${ic("plus")}Registrar um café</a>` : `<a class="btn primary lg" href="#/cafe/novo">${ic("plus")}Cadastrar meu primeiro café</a>`}
+          ${S.coffees.length ? `<a class="btn primary lg" href="#/preparar">${ic("plus")}Registrar café</a>` : `<a class="btn primary lg" href="#/cafe/novo">${ic("plus")}Cadastrar meu primeiro café</a>`}
           <button class="btn lg" data-action="open-timer">${ic("timer")}Timer</button>
           ${brews.length ? `<button class="btn lg ghost" id="repeatLast">${ic("repeat")}Repetir o último</button>` : ""}
         </div>
       </div>
-      <div class="hero-bags">${heroBags.map((c) => coffeeAvatar(c)).join("") || bagSVG({ color: "#a86b3c", label: "#efe6d8", initials: "CL" }, { fade: false })}</div>
+      <div class="hero-logo"><img src="logo-v2.png" alt="CoffeeLab"></div>
     </section>
 
+    ${coach && coach.tips.length ? `<section class="section">${coachCard(coach)}</section>` : ""}
+
     <section class="section grid g4">
-      <div class="card stat"><span class="v num">${week.length}</span><span class="k">cafés nos últimos 7 dias</span></div>
-      <div class="card stat"><span class="v num">${fmtN(avg(last30.map((b) => num(b.rating))))}<small>/10</small></span><span class="k">nota média (30 dias)</span></div>
-      <div class="card stat"><span class="v num">${fmtG(week.reduce((s, b) => s + num(b.dose_g), 0))}</span><span class="k">de café na semana</span></div>
-      <div class="card stat"><span class="v num">${active.length}</span><span class="k">cafés na despensa</span></div>
+      <div class="card stat flash"><span class="no">Nº 01</span><span class="v num">${week.length}</span><span class="k">cafés nos últimos 7 dias</span></div>
+      <div class="card stat flash"><span class="no">Nº 02</span><span class="v num">${fmtN(avg(last30.map((b) => num(b.rating))))}<small>/10</small></span><span class="k">nota média (30 dias)</span></div>
+      <div class="card stat flash"><span class="no">Nº 03</span><span class="v num">${fmtG(week.reduce((s, b) => s + num(b.dose_g), 0))}</span><span class="k">de café na semana</span></div>
+      <div class="card stat flash"><span class="no">Nº 04</span><span class="v num">${active.length}</span><span class="k">cafés na despensa</span></div>
     </section>
 
     ${low.length ? `<section class="section"><div class="notice row">${ic("bag")}<span><b style="color:var(--warn)">Acabando:</b> ${low.map((c) => esc(c.name) + " (" + fmtG(stock(c.id).remaining) + ")").join(", ")}</span></div></section>` : ""}
@@ -615,6 +870,17 @@ function viewHome() {
   };
 }
 
+function stamp(r, size) {
+  if (r == null) return "";
+  const v = num(r), cls = v >= 8 ? "top" : v >= 6 ? "ok" : "low";
+  const word = v >= 9 ? "OBRA-PRIMA" : v >= 8 ? "APROVADO" : v >= 6.5 ? "NA MÉDIA" : v >= 5 ? "AJUSTAR" : "REPROVADO";
+  return `<span class="stamp ${cls} ${size || ""}"><small>${word}</small><b>${fmtN(v)}</b></span>`;
+}
+function scoreDot(r) {
+  if (r == null) return `<span class="score-dot none">—</span>`;
+  const v = num(r); return `<span class="score-dot ${v >= 8 ? "top" : v >= 6 ? "ok" : "low"}">${fmtN(v)}</span>`;
+}
+
 function brewList(list) {
   return `<div class="brew-list">${list.map((b) => {
     const c = coffeeById(b.coffee_id), m = METHOD[b.method] || METHOD.outro;
@@ -622,7 +888,7 @@ function brewList(list) {
     return `<a class="brew-item" href="#/preparo/${b.id}">
       <span class="brew-icon">${methodIcon(b.method)}</span>
       <span><div class="t">${esc(m.name)} · ${esc(c ? c.name : "Café removido")}</div><div class="s">${fmtDayLabel(brewTime(b))}, ${fmtClock(brewTime(b))}${bits ? " · " + bits : ""}</div></span>
-      <span class="score">${b.rating != null ? fmtN(b.rating) : "—"}</span>
+      ${scoreDot(b.rating)}
     </a>`;
   }).join("")}</div>`;
 }
@@ -638,7 +904,7 @@ function viewPantry() {
   }).sort((a, b) => stock(b.id).remaining - stock(a.id).remaining);
   const html = `<div class="page">
     <div class="page-head">
-      <div><div class="eyebrow">Seus grãos</div><h1 class="title">Despensa</h1></div>
+      <div><div class="eyebrow ribbon">Seus grãos</div><h1 class="title">Despensa</h1></div>
       <div class="row wrap">
         <div class="seg" id="pf">${["ativos", "acabados", "todos"].map((f) => `<button class="${pantryFilter === f ? "on" : ""}" data-f="${f}">${f[0].toUpperCase() + f.slice(1)}</button>`).join("")}</div>
         <a class="btn primary" href="#/cafe/novo">${ic("plus")}Novo café</a>
@@ -694,9 +960,9 @@ function viewCoffee(id) {
 
       <div class="stack" style="gap:14px">
         <div class="grid g3">
-          <div class="card stat"><span class="v num">${fmtG(st.remaining)}</span><span class="k">restantes</span></div>
-          <div class="card stat"><span class="v num">${brews.length}</span><span class="k">preparos · ${fmtG(used)}</span></div>
-          <div class="card stat"><span class="v num">${fmtN(avg(rated.map((b) => num(b.rating))))}<small>/10</small></span><span class="k">nota média</span></div>
+          <div class="card stat flash"><span class="no">Nº 05</span><span class="v num">${fmtG(st.remaining)}</span><span class="k">restantes</span></div>
+          <div class="card stat flash"><span class="no">Nº 06</span><span class="v num">${brews.length}</span><span class="k">preparos · ${fmtG(used)}</span></div>
+          <div class="card stat flash"><span class="no">Nº 07</span><span class="v num">${fmtN(avg(rated.map((b) => num(b.rating))))}<small>/10</small></span><span class="k">nota média</span></div>
         </div>
 
         <div class="card">
@@ -705,7 +971,7 @@ function viewCoffee(id) {
             const r = clamp(num(b.remaining_g) / Math.max(1, num(b.size_g)), 0, 1);
             const status = b.status === "finished" ? `<span class="badge">Acabou ${fmtDate(b.finished_at)}</span>` : b.status === "open" ? `<span class="badge leather">Aberto</span>` : `<span class="badge">Lacrado</span>`;
             return `<div class="bag-line">
-              <div style="width:34px">${bagSVG(c.avatar, { ratio: r })}</div>
+              <div style="width:34px">${bagSVG(c.avatar, { name: c.name,  ratio: r })}</div>
               <div class="stack" style="gap:7px">
                 <div class="row between"><span class="small"><b>Saco ${i + 1}</b> · ${fmtG(num(b.remaining_g))} de ${fmtG(num(b.size_g))} ${b.price ? "· " + fmtMoney(num(b.price)) : ""}</span>${status}</div>
                 <div class="progress"><i style="width:${r * 100}%"></i></div>
@@ -761,7 +1027,7 @@ function recipeLine(b) {
 
 function addBagModal(c) {
   const m = openModal(`
-    <div class="modal-head"><div><div class="eyebrow">${esc(c.name)}</div><h2 class="h2" style="margin-top:4px">Novo saco</h2></div><button class="close-x" data-close>${ic("x")}</button></div>
+    <div class="modal-head"><div><div class="eyebrow ribbon">${esc(c.name)}</div><h2 class="h2" style="margin-top:4px">Novo saco</h2></div><button class="close-x" data-close>${ic("x")}</button></div>
     <div class="form-grid">
       <div class="field"><label>Tamanho</label><div class="input-unit"><input class="input" id="bs" type="number" inputmode="decimal" value="${c.default_bag_g || 250}"><span class="unit">g</span></div></div>
       <div class="field"><label>Preço <span class="faint">(opcional)</span></label><div class="input-unit"><input class="input" id="bp" type="number" inputmode="decimal" step="0.01" value="${c.price || ""}"><span class="unit">R$</span></div></div>
@@ -814,8 +1080,8 @@ function bagReviewModal(bag) {
 
   const m = openModal(`
     <div class="modal-head">
-      <div class="row" style="gap:16px"><div style="width:56px">${bagSVG(c?.avatar, { ratio: 0, fade: false })}</div>
-      <div><div class="eyebrow">Saco finalizado</div><h2 class="h2" style="margin-top:4px">${esc(c ? c.name : "Café")}</h2></div></div>
+      <div class="row" style="gap:16px"><div style="width:56px">${bagSVG(c?.avatar, { name: c && c.name,  ratio: 0, fade: false })}</div>
+      <div><div class="eyebrow ribbon">Saco finalizado</div><h2 class="h2" style="margin-top:4px">${esc(c ? c.name : "Café")}</h2></div></div>
       <button class="close-x" data-close>${ic("x")}</button>
     </div>
     <div class="kv">
@@ -866,20 +1132,18 @@ function viewCoffeeEditor(id) {
 
   const html = `<div class="page">
     <a class="btn ghost sm" href="${existing ? "#/cafe/" + id : "#/despensa"}" style="margin-left:-10px">${ic("back")}${existing ? esc(existing.name) : "Despensa"}</a>
-    <div class="page-head" style="margin-top:10px"><div><div class="eyebrow">${existing ? "Editar" : "Novo grão"}</div><h1 class="title">${existing ? "Editar café" : "Cadastrar <em>café</em>"}</h1></div></div>
+    <div class="page-head" style="margin-top:10px"><div><div class="eyebrow ribbon">${existing ? "Editar" : "Novo café"}</div><h1 class="title">${existing ? "Editar café" : "Novo café"}</h1></div></div>
 
     <div class="editor">
       <div class="editor-preview">
         <div id="prev"></div>
         <div><div class="h3" id="prevName">${esc(c.name) || "Seu café"}</div><div class="small muted" id="prevSub" style="margin-top:4px"></div></div>
         <div class="stack" style="width:100%;gap:16px;text-align:left">
-          <div class="field"><span class="label">Formato</span><div class="shape-pick" id="shapes">${SHAPES.map((s) => `<button data-shape="${s.id}" class="${c.avatar.shape === s.id ? "on" : ""}">${bagSVG(Object.assign({}, c.avatar, { shape: s.id }), { fade: false })}${s.name}</button>`).join("")}</div></div>
-          <div class="field"><span class="label">Cor do saco</span>${swatches(BAG_COLORS, "color")}</div>
-          <div class="field"><span class="label">Cor do rótulo</span>${swatches(LABEL_COLORS, "label")}</div>
+          <div class="field"><span class="label">Cor do café no saco</span>${swatches(BAG_COLORS, "color")}</div>
+          <div class="field"><span class="label">Cor da etiqueta</span>${swatches(LABEL_COLORS, "label")}</div>
           <div class="field"><span class="label">Torra · <span id="roastName">${ROASTS[c.avatar.roast - 1]}</span></span>
             <input type="range" class="range" id="roast" min="1" max="5" step="1" value="${c.avatar.roast}">
             <div class="roast-scale"><span>Clara</span><span>Escura</span></div></div>
-          <div class="field"><label>Sigla no rótulo</label><input class="input" id="ini" maxlength="3" placeholder="Ex.: MOG" value="${esc(c.avatar.initials)}"></div>
         </div>
       </div>
 
@@ -892,7 +1156,8 @@ function viewCoffeeEditor(id) {
             ${inp("origin", "Origem", "Ex.: Brasil")}
             ${inp("region", "Região / Fazenda", "Ex.: Sul de Minas")}
             ${inp("variety", "Variedade", "Ex.: Bourbon Amarelo")}
-            <div class="field"><label>Processo</label><select class="select" data-k="process"><option value="">—</option>${PROCESSES.map((p) => `<option ${c.process === p ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+            <div class="field"><label>Processo</label><select class="select" id="procSel"><option value="">—</option>${PROCESSES.filter((p) => p !== "Outro").map((p) => `<option ${c.process === p ? "selected" : ""}>${p}</option>`).join("")}<option value="__outro" ${c.process && !PROCESSES.includes(c.process) || c.process === "Outro" ? "selected" : ""}>Outro…</option></select>
+              <input class="input" id="procOther" placeholder="Escreva o processo (ex.: Maceração carbônica)" value="${esc(c.process && !PROCESSES.includes(c.process) ? c.process : "")}" style="${c.process && !PROCESSES.includes(c.process) || c.process === "Outro" ? "" : "display:none"}"></div>
             ${inp("altitude", "Altitude", "1.200", "text", "m")}
             ${inp("roast_date", "Data da torra", "", "date")}
             ${inp("price", "Preço do saco", "0,00", "number", "R$")}
@@ -921,7 +1186,7 @@ function viewCoffeeEditor(id) {
     html,
     mount(v) {
       const drawPrev = () => {
-        $("#prev", v).innerHTML = bagSVG(c.avatar, { fade: false });
+        $("#prev", v).innerHTML = bagSVG(c.avatar, { name: c.name,  fade: false });
         $("#prevName", v).textContent = c.name || "Seu café";
         $("#prevSub", v).textContent = [c.roaster, ROASTS[c.avatar.roast - 1]].filter(Boolean).join(" · ");
         $$("#shapes button", v).forEach((b) => { b.querySelector(".bag-av").outerHTML = bagSVG(Object.assign({}, c.avatar, { shape: b.dataset.shape }), { fade: false }); });
@@ -930,10 +1195,17 @@ function viewCoffeeEditor(id) {
       drawPrev();
       $$("[data-k]", v).forEach((el) => (el.oninput = () => {
         c[el.dataset.k] = el.value;
-        if (el.dataset.k === "name" && autoInitials) { c.avatar.initials = initialsOf(el.value); $("#ini", v).value = c.avatar.initials; }
+        if (el.dataset.k === "name") c.avatar.initials = initialsOf(el.value);
         if (el.dataset.k === "name" || el.dataset.k === "roaster") drawPrev();
       }));
-      $("#ini", v).oninput = (e) => { autoInitials = !e.target.value; c.avatar.initials = e.target.value; drawPrev(); };
+      const procSel = $("#procSel", v), procOther = $("#procOther", v);
+      procSel.onchange = () => {
+        const other = procSel.value === "__outro";
+        procOther.style.display = other ? "" : "none";
+        c.process = other ? procOther.value.trim() : procSel.value;
+        if (other) procOther.focus();
+      };
+      procOther.oninput = () => (c.process = procOther.value.trim());
       $$("#shapes button", v).forEach((b) => (b.onclick = () => { c.avatar.shape = b.dataset.shape; $$("#shapes button", v).forEach((x) => x.classList.toggle("on", x === b)); drawPrev(); }));
       $$(".swatches", v).forEach((wrap) => {
         const key = wrap.dataset.key;
@@ -977,7 +1249,7 @@ function viewCoffeeEditor(id) {
         } else {
           body.bags = newBags.filter((b) => num(b.size_g) > 0).map((b) => ({ size_g: num(b.size_g), remaining_g: Math.max(0, num(b.size_g) - num(b.used)), price: b.price === "" || b.price == null ? body.price : num(b.price) }));
           const r = await api.post("/api/coffees", body);
-          await loadState(); toast("Café cadastrado ☕"); go("#/cafe/" + r.id);
+          await loadState(); toast("Café cadastrado"); go("#/cafe/" + r.id);
         }
       });
     },
@@ -999,8 +1271,15 @@ function viewBrewForm(editId, params) {
   f.coffee_id = f.coffee_id || params.get("cafe") || (lastBrew && stock(lastBrew.coffee_id).count ? lastBrew.coffee_id : available[0] && available[0].id) || "";
   f.method = f.method || params.get("metodo") || (lastBrew && lastBrew.method) || "v60";
   f.photos = f.photos || []; f.flavors = f.flavors || []; f.sensory = f.sensory || {};
+  if (f.pressure_h == null && f.pressure_zone) f.pressure_h = oldZoneToHour(f.pressure_zone);
+  f.equipment_ids = Array.isArray(f.equipment_ids) ? f.equipment_ids.slice() : f.brewer_id ? [f.brewer_id] : [];
   f.brewed_at = editing ? brewTime(editing) : null;
-  if (!base) applyDefaults(f, true);
+  if (!base) {
+    applyDefaults(f, true);
+    const pl = sortedBrews().find((b) => b.coffee_id === f.coffee_id && b.method === f.method);
+    if (pl) ["dose_g", "water_g", "yield_g", "temp_c", "grind", "grinder_id", "bloom_s", "water_type", "filter", "steep_h", "milk"].forEach((k) => (f[k] = pl[k]));
+  }
+  if (params.get("moagem") && !editing) f.grind = params.get("moagem");
   if (f.rating == null) f.rating = 7;
   let ratingTouched = !!editing;
 
@@ -1012,7 +1291,7 @@ function viewBrewForm(editId, params) {
 
   const html = `<div class="page">
     <div class="page-head">
-      <div><div class="eyebrow">${editing ? "Editar preparo" : repeatFrom ? "Repetindo receita" : "Novo preparo"}</div><h1 class="title">${editing ? "Ajustar <em>registro</em>" : "Hora do <em>café</em>"}</h1></div>
+      <div><div class="eyebrow ribbon">${editing ? "Editar preparo" : repeatFrom ? "Repetindo receita" : "Novo preparo"}</div><h1 class="title">${editing ? "Editar preparo" : "Novo preparo"}</h1></div>
       ${!editing && lastBrew && !repeatFrom ? `<button class="btn" id="repeatBtn">${ic("repeat")}Repetir o último</button>` : ""}
     </div>
 
@@ -1057,6 +1336,7 @@ function viewBrewForm(editId, params) {
           <div class="row"><button class="btn primary block" id="mGo">Iniciar</button><button class="btn icon" id="mLap" title="Marcar etapa">${ic("spark")}</button><button class="btn icon" id="mReset" title="Zerar">${ic("repeat")}</button></div>
           <div class="lap-list" id="mLaps"></div>
         </div>
+        <div id="coachBox"></div>
         <div id="suggestBox"></div>
         <div class="card stack" id="summary"></div>
         <button class="btn primary lg block" id="saveBrew">${editing ? "Salvar alterações" : "Registrar café"}</button>
@@ -1093,10 +1373,13 @@ function viewBrewForm(editId, params) {
             ${field("grind", "Moagem", g && g.unit ? g.unit : "cliques", { stepper: true, step: 1, ph: "20" })}
             <div class="field"><label>Tempo de extração</label><div class="input-unit"><input class="input" data-f="time_txt" type="text" inputmode="numeric" placeholder="${isEsp ? "0:28" : "3:00"}" value="${f.time_s ? fmtTime(f.time_s) : ""}"><span class="unit">min</span></div></div>
           </div>
-          <details class="more" style="margin-top:16px" ${f.bloom_s || f.water_type || f.filter || f.brewer_id ? "open" : ""}><summary>Mais detalhes</summary>
+          ${isEsp ? `<div class="field" style="margin-top:16px"><div class="row between"><span class="label">Manômetro · até onde o ponteiro chegou</span><button class="btn ghost sm" id="gClear" type="button">Limpar</button></div>
+            <div id="gauge" style="display:flex;justify-content:center">${gaugeSVG(f.pressure_h)}</div></div>` : ""}
+          <details class="more" style="margin-top:16px" ${f.bloom_s || f.water_type || f.filter || (f.equipment_ids && f.equipment_ids.length) ? "open" : ""}><summary>Mais detalhes</summary>
             <div class="form-grid c3">
-              <div class="field"><label>Cafeteira / equipamento</label><select class="select" id="brewer"><option value="">—</option>${S.equipment.filter((e) => e.type !== "grinder").map((x) => `<option value="${x.id}" ${f.brewer_id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div>
-              ${isEsp ? field("pressure", "Pressão", "bar", { ph: "9" }) : field("bloom_s", "Bloom", "seg", { ph: "40" })}
+              <div class="field full"><span class="label">Equipamentos usados <span class="faint">(toque em quantos quiser)</span></span>
+                <div class="chips" id="eqs">${S.equipment.filter((e) => e.type !== "grinder").map((x) => `<button class="chip ${f.equipment_ids.includes(x.id) ? "on" : ""}" data-eq="${x.id}">${esc(x.name)}</button>`).join("") || `<span class="small muted">Cadastre em Ajustes → Equipamentos</span>`}</div></div>
+              ${isEsp ? "" : field("bloom_s", "Bloom", "seg", { ph: "40" })}
               ${field("water_type", "Água usada", "", { text: true, ph: "Filtrada" })}
               ${!isEsp ? field("filter", "Filtro", "", { text: true, ph: "Papel" }) : ""}
               ${field("milk", "Leite / adicionais", "", { text: true, ph: "—" })}
@@ -1124,8 +1407,28 @@ function viewBrewForm(editId, params) {
         };
         $$("[data-inc]", recipeBox).forEach((b) => (b.onclick = () => step(b.dataset.inc, num(b.dataset.step))));
         $$("[data-dec]", recipeBox).forEach((b) => (b.onclick = () => step(b.dataset.dec, -num(b.dataset.step))));
-        $("#grinder", recipeBox).onchange = (e) => { f.grinder_id = e.target.value; const last = lastWith((b) => b.grinder_id === f.grinder_id && b.coffee_id === f.coffee_id); if (last && !f.grind) f.grind = last.grind; drawRecipe(); };
-        const br = $("#brewer", recipeBox); if (br) br.onchange = (e) => (f.brewer_id = e.target.value);
+        $("#grinder", recipeBox).onchange = (e) => { f.grinder_id = e.target.value; const last = lastWith((b) => b.grinder_id === f.grinder_id && b.coffee_id === f.coffee_id && b.method === f.method); f.grind = last && last.grind ? last.grind : defaultGrind(f); drawRecipe(); };
+        const gBox = $("#gauge", recipeBox);
+        if (gBox) {
+          const setFromEvent = (e) => {
+            const svg = gBox.querySelector("svg"), r = svg.getBoundingClientRect();
+            const x = (e.clientX - r.left) * (300 / r.width) - 150, y = (e.clientY - r.top) * (262 / r.height) - 150;
+            let deg = Math.atan2(x, -y) * 180 / Math.PI; // 0 = 12h
+            if (y > 40 && Math.abs(deg) > 120) deg = deg > 0 ? 120 : -120;
+            const h = clamp(Math.round((12 + deg / 30) * 4) / 4, GAUGE_MIN, GAUGE_MAX);
+            if (h !== f.pressure_h) { f.pressure_h = h; gBox.innerHTML = gaugeSVG(h); }
+          };
+          let drag = false;
+          gBox.onpointerdown = (e) => { drag = true; gBox.setPointerCapture(e.pointerId); setFromEvent(e); };
+          gBox.onpointermove = (e) => { if (drag) setFromEvent(e); };
+          gBox.onpointerup = gBox.onpointercancel = () => (drag = false);
+          $("#gClear", recipeBox).onclick = () => { f.pressure_h = null; gBox.innerHTML = gaugeSVG(null); };
+        }
+        $$("[data-eq]", recipeBox).forEach((b) => (b.onclick = () => {
+          const id = b.dataset.eq, i = f.equipment_ids.indexOf(id);
+          i >= 0 ? f.equipment_ids.splice(i, 1) : f.equipment_ids.push(id);
+          b.classList.toggle("on", i < 0);
+        }));
       };
 
       // ajusta a água pela proporção ao mudar a dose
@@ -1153,14 +1456,24 @@ function viewBrewForm(editId, params) {
         const after = st ? st.remaining - dose : 0;
         const ppg = st && st.open ? bagPricePerGram(st.open, c) : null;
         $("#summary", v).innerHTML = c ? `
-          <div class="row"><div style="width:44px">${bagSVG(c.avatar, { ratio: st && st.open ? clamp((num(st.open.remaining_g) - (editing ? 0 : dose)) / Math.max(1, num(st.open.size_g)), 0, 1) : 0, count: st ? st.count : 1 })}</div>
+          <div class="row"><div style="width:44px">${bagSVG(c.avatar, { name: c.name,  ratio: st && st.open ? clamp((num(st.open.remaining_g) - (editing ? 0 : dose)) / Math.max(1, num(st.open.size_g)), 0, 1) : 0, count: st ? st.count : 1 })}</div>
           <div><div class="h3">${esc(c.name)}</div><div class="small muted">${esc(m.name)}${dose ? " · " + fmtN(dose) + " g" : ""}</div></div></div>
           ${!editing && st ? `<div class="small muted">Depois desse café: <b style="color:var(--text)">${fmtG(Math.max(0, after))}</b> no estoque${after < 0 ? ` <span class="badge bad">faltam ${fmtG(-after)}</span>` : ""}</div>
           ${st.open && dose >= num(st.open.remaining_g) && num(st.open.remaining_g) > 0 ? `<div class="badge warn">Esse saco vai acabar${st.count > 1 ? " e o próximo abre" : ""}</div>` : ""}` : ""}
           ${ppg && dose ? `<div class="small muted">Custo dessa xícara: <b style="color:var(--text)">${fmtMoney(ppg * dose)}</b></div>` : ""}` : `<span class="muted small">Escolha um café.</span>`;
       };
 
+      const drawCoach = () => {
+        const box = $("#coachBox", v); if (!box) return;
+        box.innerHTML = editing ? "" : coachCard(coachFor(f.coffee_id, f.method), { cta: false, max: 3 });
+        const c = coachFor(f.coffee_id, f.method);
+        if (c && c.grind != null && !editing) {
+          box.insertAdjacentHTML("beforeend", `<button class="btn sm block" id="useCoach" style="margin-top:10px">Usar ${esc(String(c.grind))} na moagem</button>`);
+          $("#useCoach", box).onclick = () => { f.grind = c.grind; if (c.grinder) f.grinder_id = c.grinder.id; drawRecipe(); toast("Moagem ajustada"); };
+        }
+      };
       const drawSuggest = () => {
+        drawCoach();
         const best = S.brews.filter((b) => b.coffee_id === f.coffee_id && b.method === f.method && b.rating != null && b.id !== editId).sort((a, b) => num(b.rating) - num(a.rating))[0];
         const box = $("#suggestBox", v);
         if (!best || editing) { box.innerHTML = ""; return; }
@@ -1169,7 +1482,7 @@ function viewBrewForm(editId, params) {
       };
 
       const lastWith = (pred) => sortedBrews().find(pred);
-      const copyRecipe = (src) => ["dose_g", "water_g", "yield_g", "temp_c", "grind", "grinder_id", "brewer_id", "bloom_s", "pressure", "water_type", "filter", "steep_h", "milk"].forEach((k) => (f[k] = src[k]));
+      const copyRecipe = (src) => { ["dose_g", "water_g", "yield_g", "temp_c", "grind", "grinder_id", "bloom_s", "pressure", "pressure_h", "water_type", "filter", "steep_h", "milk"].forEach((k) => (f[k] = src[k])); f.equipment_ids = brewEquip(src).map((e) => e.id); };
 
       // Ao trocar café/método: puxa a última receita desse par automaticamente
       const onPairChange = () => {
@@ -1218,7 +1531,7 @@ function viewBrewForm(editId, params) {
         $("#mClock", v).classList.toggle("running", Timer.running);
         $("#mGo", v).textContent = Timer.running ? "Pausar" : t > 0 ? "Continuar" : "Iniciar";
         let st = "";
-        if (Timer.mode === "pour") { const i = POUR_STAGES.reduce((a, s, idx) => (t >= s.t ? idx : a), 0); const wt = num(f.water_g); st = POUR_STAGES[i].label + (wt && POUR_STAGES[i].t < 150 ? ` · até ${Math.round(wt * POUR_STAGES[i].pct)} g` : ""); }
+        if (Timer.mode === "pour") { const i = POUR_STAGES.reduce((a, s, idx) => (t >= s.t ? idx : a), 0); const tg = pourTargets(num(f.water_g), num(f.dose_g)); st = POUR_STAGES[i].label + (tg && POUR_STAGES[i].t < 150 ? ` · até ${tg[i]} g` : ""); }
         else if (Timer.mode === "espresso") st = t === 0 ? "alvo 25–32 s" : t < 25 ? "extraindo…" : t <= 32 ? "no ponto" : "passou do ponto";
         else if (Timer.target) st = Timer.target - t > 0 ? "faltam " + fmtTime(Timer.target - t) : "pronto!";
         $("#mStage", v).textContent = st;
@@ -1227,10 +1540,13 @@ function viewBrewForm(editId, params) {
         if (Timer.running) f._timerApplied = false;
       };
       const off = Timer.on(drawMini); drawMini();
-      $("#mGo", v).onclick = () => { Timer.waterTarget = num(f.water_g) || null; Timer.toggle(); };
+      $("#mGo", v).onclick = () => { Timer.waterTarget = num(f.water_g) || null; Timer.doseTarget = num(f.dose_g) || null; Timer.toggle(); };
       $("#mLap", v).onclick = () => Timer.lap();
       $("#mReset", v).onclick = () => { Timer.reset(); syncTimerMode(); };
-      $("#bigTimer", v).onclick = () => openTimer({ water: num(f.water_g) || null, onUse: (t, laps) => { f.time_s = round(t, 0); f.laps = laps; const el = $('[data-f="time_txt"]', v); if (el) el.value = fmtTime(f.time_s); } });
+      $("#bigTimer", v).onclick = () => openTimer({ water: (METHOD[f.method] || {}).kind === "espresso" ? null : num(f.water_g) || null, dose: num(f.dose_g) || null, onUse: (t, laps, plan) => {
+        f.time_s = round(t, 0); f.laps = laps;
+        if (plan && (METHOD[f.method] || {}).kind !== "espresso") { f.dose_g = plan.dose; f.water_g = plan.water; waterTouched = true; drawRecipe(); }
+        const el = $('[data-f="time_txt"]', v); if (el) el.value = fmtTime(f.time_s); } });
 
       const rb = $("#repeatBtn", v); if (rb) rb.onclick = () => go(`#/preparar?repetir=${lastBrew.id}`);
 
@@ -1241,10 +1557,12 @@ function viewBrewForm(editId, params) {
         if (!num(f.dose_g)) { const el = $('[data-f="dose_g"]', v); el && el.focus(); throw new Error("Coloca a dose de café (g)"); }
         const body = {};
         ["coffee_id", "method", "grinder_id", "brewer_id", "water_type", "filter", "milk"].forEach((k) => (body[k] = f[k] || null));
+        body.pressure_h = f.pressure_h == null ? null : f.pressure_h; body.pressure_zone = null;
         ["dose_g", "water_g", "yield_g", "temp_c", "bloom_s", "pressure", "steep_h"].forEach((k) => (body[k] = f[k] === "" || f[k] == null ? null : num(f[k], null)));
         body.grind = f.grind === "" || f.grind == null ? null : String(f.grind).replace(".", ",");
         body.time_s = f.time_s ? round(num(f.time_s), 0) : null;
         body.rating = f.rating; body.flavors = f.flavors; body.sensory = f.sensory;
+        body.equipment_ids = f.equipment_ids.slice(); body.brewer_id = null;
         body.notes = $("#notes", v).value; body.photos = f.photos;
         if (Timer.laps.length && !editing) body.laps = Timer.laps.map((l) => round(l, 1));
         let res;
@@ -1258,7 +1576,7 @@ function viewBrewForm(editId, params) {
           Timer.reset();
         }
         await loadState();
-        toast(editing ? "Registro atualizado" : "Café registrado ☕");
+        toast(editing ? "Registro atualizado" : "Café registrado");
         go("#/preparo/" + res.brew.id);
         if (res.short_g > 0) toast(`Faltaram ${fmtG(res.short_g)} no estoque`, true);
         if (res.finished_bags && res.finished_bags.length) setTimeout(() => bagReviewModal(S.bags.find((b) => b.id === res.finished_bags[0])), 500);
@@ -1275,6 +1593,20 @@ function viewBrewForm(editId, params) {
   };
 }
 
+// moagem padrão do moedor (ex.: Chestnut = 7 no espresso, Bodum = 1)
+function defaultGrind(f) {
+  const g = equipById(f.grinder_id);
+  if (!g) return null;
+  const esp = (METHOD[f.method] || {}).kind === "espresso";
+  const v = esp ? g.default_grind_espresso : g.default_grind;
+  return v === "" || v == null ? null : v;
+}
+
+function brewEquip(b) {
+  const ids = Array.isArray(b.equipment_ids) ? b.equipment_ids : b.brewer_id ? [b.brewer_id] : [];
+  return ids.map(equipById).filter(Boolean);
+}
+
 function applyDefaults(f, initial) {
   const k = (METHOD[f.method] || METHOD.outro).kind;
   const ratio = (S.settings.ratios || {})[f.method] || DEFAULT_RATIO[f.method] || 15;
@@ -1284,15 +1616,15 @@ function applyDefaults(f, initial) {
   f.yield_g = k === "espresso" ? round(dose * ratio, 0) : null;
   f.temp_c = k === "espresso" ? 93 : k === "cold" ? null : k === "moka" ? 70 : 93;
   f.steep_h = k === "cold" ? 16 : null;
-  f.grind = null;
   if (!f.grinder_id && grinders()[0]) f.grinder_id = grinders()[0].id;
+  f.grind = defaultGrind(f);
 }
 
 /* ---------------------------------------------------------- detalhe preparo */
 function viewBrew(id) {
   const b = S.brews.find((x) => x.id === id);
   if (!b) return { html: `<div class="page"><div class="card empty-state"><p>Registro não encontrado.</p><a class="btn" href="#/historico">Histórico</a></div></div>` };
-  const c = coffeeById(b.coffee_id), m = METHOD[b.method] || METHOD.outro, g = equipById(b.grinder_id), br = equipById(b.brewer_id);
+  const c = coffeeById(b.coffee_id), m = METHOD[b.method] || METHOD.outro, g = equipById(b.grinder_id), eqs = brewEquip(b);
   const isEsp = m.kind === "espresso";
   const out = isEsp ? num(b.yield_g) : num(b.water_g);
   const cost = brewCost(b);
@@ -1305,9 +1637,10 @@ function viewBrew(id) {
     ["Tempo", b.time_s ? fmtTime(b.time_s) : null],
     ["Temperatura", b.temp_c ? fmtN(b.temp_c, 0) + " °C" : null],
     ["Bloom", b.bloom_s ? b.bloom_s + " s" : null],
+
     ["Pressão", b.pressure ? b.pressure + " bar" : null],
     ["Infusão", b.steep_h ? b.steep_h + " h" : null],
-    ["Equipamento", br ? br.name : null],
+    [eqs.length > 1 ? "Equipamentos" : "Equipamento", eqs.length ? eqs.map((e) => e.name).join(", ") : null],
     ["Água", b.water_type || null],
     ["Filtro", b.filter || null],
     ["Adicionais", b.milk || null],
@@ -1318,12 +1651,12 @@ function viewBrew(id) {
     <div class="page-head" style="margin-top:10px;align-items:center">
       <div class="row" style="gap:18px">
         <span class="brew-icon" style="width:58px;height:58px;border-radius:18px">${methodIcon(b.method)}</span>
-        <div><div class="eyebrow">${fmtDayLabel(brewTime(b))} · ${fmtClock(brewTime(b))}</div><h1 class="title" style="font-size:32px">${esc(m.name)}</h1>
+        <div><div class="eyebrow ribbon">${fmtDayLabel(brewTime(b))} · ${fmtClock(brewTime(b))}</div><h1 class="title" style="font-size:32px">${esc(m.name)}</h1>
         ${c ? `<a class="muted" href="#/cafe/${c.id}">${esc(c.name)}${c.roaster ? " · " + esc(c.roaster) : ""}</a>` : `<span class="muted">Café removido</span>`}</div>
       </div>
-      <div style="text-align:right"><div class="rating-big" style="justify-content:flex-end"><span class="v">${b.rating != null ? fmtN(b.rating) : "—"}</span><span class="of">/10</span></div><div class="rating-word">${ratingWord(b.rating)}</div></div>
+      <div style="text-align:center">${stamp(b.rating, "lg")}<div class="rating-word" style="margin-top:6px">${ratingWord(b.rating)}</div></div>
     </div>
-    <div class="card pad-lg"><div class="kv">${kv.map(([k, val]) => `<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div></div>
+    <div class="card pad-lg"><div class="kv">${brewGauge(b) != null ? `<div><span>Manômetro</span><div style="margin-top:2px">${gaugeSVG(brewGauge(b), { mini: true })}</div></div>` : ""}${kv.map(([k, val]) => `<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div></div>
     ${(b.flavors && b.flavors.length) || (b.sensory && Object.values(b.sensory).some(Boolean)) ? `<div class="card" style="margin-top:14px">
       ${b.flavors && b.flavors.length ? `<span class="label">Sabores</span><div class="tag-cloud" style="margin-top:8px">${b.flavors.map((f) => `<span class="badge leather">${esc(f)}</span>`).join("")}</div>` : ""}
       ${b.sensory && Object.values(b.sensory).some(Boolean) ? `<div class="stack" style="margin-top:16px">${SENSORY.map(([k, l]) => `<div class="hbar" style="grid-template-columns:80px 1fr 24px"><span class="muted">${l}</span><span class="track"><i style="width:${(num(b.sensory[k]) / 5) * 100}%"></i></span><b>${b.sensory[k] || "—"}</b></div>`).join("")}</div>` : ""}
@@ -1345,7 +1678,7 @@ function viewBrew(id) {
 const histF = { q: "", method: "", coffee: "", min: "" };
 function viewHistory() {
   const html = `<div class="page">
-    <div class="page-head"><div><div class="eyebrow">${S.brews.length} registros</div><h1 class="title">Histórico</h1></div>
+    <div class="page-head"><div><div class="eyebrow ribbon">${S.brews.length} registros</div><h1 class="title">Histórico</h1></div>
       <a class="btn" href="/api/export" download>${ic("download")}Exportar</a></div>
     <div class="card" style="padding:14px;margin-bottom:18px">
       <div class="form-grid c4">
@@ -1419,22 +1752,29 @@ function viewDashboard() {
   list.forEach((b) => (b.flavors || []).forEach((f) => (flavorCount[f] = (flavorCount[f] || 0) + 1)));
   const flavors = Object.entries(flavorCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
+  const order = PRESSURE_ZONES.map((z) => z[0]);
+  const byPz = {};
+  rated.filter((b) => b.method === "espresso" && brewGauge(b) != null).forEach((b) => { const k = Math.round(brewGauge(b) * 2) / 2; (byPz[k] = byPz[k] || []).push(num(b.rating)); });
+  const pzRows = Object.entries(byPz).map(([k, a]) => [num(k), avg(a), a.length]).sort((a, b) => a[0] - b[0]);
+  const pzTop = pzRows.filter((r) => r[2] >= 2).sort((a, b) => b[1] - a[1])[0];
+  const pzBest = pzTop ? fmtHour(pzTop[0]) : null;
+
   const finishedBags = S.bags.filter((b) => b.final_rating != null).sort((a, b) => num(b.final_rating) - num(a.final_rating));
 
   const html = `<div class="page">
-    <div class="page-head"><div><div class="eyebrow">Seu progresso</div><h1 class="title">Painel</h1></div>
+    <div class="page-head"><div><div class="eyebrow ribbon">Seu progresso</div><h1 class="title">Painel</h1></div>
       <div class="seg" id="dr">${[[30, "30 dias"], [90, "90 dias"], [365, "1 ano"], [0, "Tudo"]].map(([d, l]) => `<button class="${dashRange === d ? "on" : ""}" data-d="${d}">${l}</button>`).join("")}</div></div>
 
     ${!list.length ? `<div class="card empty-state"><p>Registra alguns cafés que o painel ganha vida: evolução das notas, consumo, custo por xícara e o que você mais curte.</p><a class="btn primary" href="#/preparar" style="margin-top:8px">Registrar café</a></div>` : `
     <div class="grid g4">
-      <div class="card stat"><span class="v num">${list.length}</span><span class="k">cafés feitos</span></div>
-      <div class="card stat"><div class="row" style="gap:8px"><span class="v num">${fmtN(avgR)}</span>${delta(avgR != null && prevAvg != null ? avgR - prevAvg : null)}</div><span class="k">nota média${prevAvg != null ? " · vs período anterior" : ""}</span></div>
-      <div class="card stat"><span class="v num">${happy != null ? Math.round(happy * 100) + "%" : "—"}</span><span class="k">cafés com nota ≥ 8</span></div>
-      <div class="card stat"><span class="v num">${fmtG(grams)}</span><span class="k">de café moído</span></div>
-      <div class="card stat"><span class="v num">${costs.length ? fmtMoney(avg(costs)) : "—"}</span><span class="k">custo médio por xícara</span></div>
-      <div class="card stat"><span class="v num">${costs.length ? fmtMoney(costs.reduce((a, b) => a + b, 0)) : "—"}</span><span class="k">gasto em café no período</span></div>
-      <div class="card stat"><span class="v num">${esp.length ? fmtN(avg(esp.map((b) => num(b.time_s))), 0) + "s" : "—"}</span><span class="k">extração média espresso</span></div>
-      <div class="card stat"><span class="v num">${pour.length ? fmtTime(avg(pour.map((b) => num(b.time_s)))) : "—"}</span><span class="k">tempo médio coado</span></div>
+      <div class="card stat flash"><span class="no">Nº 08</span><span class="v num">${list.length}</span><span class="k">cafés feitos</span></div>
+      <div class="card stat flash"><span class="no">Nº 01</span><div class="row" style="gap:8px"><span class="v num">${fmtN(avgR)}</span>${delta(avgR != null && prevAvg != null ? avgR - prevAvg : null)}</div><span class="k">nota média${prevAvg != null ? " · vs período anterior" : ""}</span></div>
+      <div class="card stat flash"><span class="no">Nº 02</span><span class="v num">${happy != null ? Math.round(happy * 100) + "%" : "—"}</span><span class="k">cafés com nota ≥ 8</span></div>
+      <div class="card stat flash"><span class="no">Nº 03</span><span class="v num">${fmtG(grams)}</span><span class="k">de café moído</span></div>
+      <div class="card stat flash"><span class="no">Nº 04</span><span class="v num">${costs.length ? fmtMoney(avg(costs)) : "—"}</span><span class="k">custo médio por xícara</span></div>
+      <div class="card stat flash"><span class="no">Nº 05</span><span class="v num">${costs.length ? fmtMoney(costs.reduce((a, b) => a + b, 0)) : "—"}</span><span class="k">gasto em café no período</span></div>
+      <div class="card stat flash"><span class="no">Nº 06</span><span class="v num">${esp.length ? fmtN(avg(esp.map((b) => num(b.time_s))), 0) + "s" : "—"}</span><span class="k">extração média espresso</span></div>
+      <div class="card stat flash"><span class="no">Nº 07</span><span class="v num">${pour.length ? fmtTime(avg(pour.map((b) => num(b.time_s)))) : "—"}</span><span class="k">tempo médio coado</span></div>
     </div>
 
     <div class="card chart-card section" style="margin-top:14px">
@@ -1453,9 +1793,11 @@ function viewDashboard() {
       <div class="card"><h2 class="h3" style="margin-bottom:12px">Melhores cafés</h2>${coffeeRows.map(([k, a, n]) => { const c = coffeeById(k); return `<div class="hbar"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c ? c.name : "—")} <span class="faint tiny">${n}</span></span><span class="track"><i style="width:${a * 10}%"></i></span><b>${fmtN(a)}</b></div>`; }).join("") || `<p class="muted small">—</p>`}</div>
     </div>
 
+    ${pzRows.length ? `<div class="card" style="margin-top:14px"><h2 class="h3" style="margin-bottom:4px">Espresso · nota por posição do manômetro</h2><p class="small muted" style="margin:0 0 12px">Onde o ponteiro estava nos seus melhores espressos${pzBest ? `` : ""}.</p>${pzRows.map(([k, a, n]) => `<div class="hbar"><span class="row" style="gap:8px"><span style="width:54px">${gaugeSVG(k, { mini: true })}</span><span class="faint tiny">${n}</span></span><span class="track"><i style="width:${a * 10}%"></i></span><b>${fmtN(a)}</b></div>`).join("")}</div>` : ""}
+
     ${flavors.length ? `<div class="card" style="margin-top:14px"><h2 class="h3" style="margin-bottom:12px">Sabores que mais aparecem</h2><div class="tag-cloud">${flavors.map(([f, n]) => `<span class="chip" style="height:32px;cursor:default">${esc(f)} <span class="faint">${n}</span></span>`).join("")}</div></div>` : ""}
 
-    ${finishedBags.length ? `<div class="card" style="margin-top:14px"><h2 class="h3" style="margin-bottom:6px">Ranking dos sacos finalizados</h2><ul class="list-plain">${finishedBags.map((b) => { const c = coffeeById(b.coffee_id); return `<li><div style="width:30px">${bagSVG(c?.avatar, { ratio: 0, fade: false })}</div><div style="flex:1"><div class="h3">${esc(c ? c.name : "—")}</div><div class="tiny muted">${b.finished_at ? "acabou " + fmtDate(b.finished_at, { day: "numeric", month: "short", year: "numeric" }) : ""}${b.buy_again === true ? " · compraria de novo" : b.buy_again === false ? " · não compraria" : ""}</div></div><span class="score">${fmtN(b.final_rating)}</span></li>`; }).join("")}</ul></div>` : ""}
+    ${finishedBags.length ? `<div class="card" style="margin-top:14px"><h2 class="h3" style="margin-bottom:6px">Ranking dos sacos finalizados</h2><ul class="list-plain">${finishedBags.map((b) => { const c = coffeeById(b.coffee_id); return `<li><div style="width:30px">${bagSVG(c?.avatar, { name: c && c.name,  ratio: 0, fade: false })}</div><div style="flex:1"><div class="h3">${esc(c ? c.name : "—")}</div><div class="tiny muted">${b.finished_at ? "acabou " + fmtDate(b.finished_at, { day: "numeric", month: "short", year: "numeric" }) : ""}${b.buy_again === true ? " · compraria de novo" : b.buy_again === false ? " · não compraria" : ""}</div></div><span class="score">${fmtN(b.final_rating)}</span></li>`; }).join("")}</ul></div>` : ""}
     `}
   </div>`;
 
@@ -1488,7 +1830,7 @@ function trendChart(rated) {
   const ticks = 5, xt = [];
   for (let i = 0; i < ticks; i++) { const t = x0 + ((x1 - x0) * i) / (ticks - 1); xt.push(`<text x="${X(t)}" y="${H - 6}" text-anchor="middle">${new Date(t).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "")}</text>`); }
   const dots = rated.map((b, i) => `<circle cx="${X(xs[i]).toFixed(1)}" cy="${Y(num(b.rating)).toFixed(1)}" r="3.5" fill="var(--faint)" opacity=".75" data-tip="${esc(fmtDate(brewTime(b)) + " · " + ((METHOD[b.method] || {}).name || "") + " · " + fmtN(b.rating))}" style="cursor:pointer"/>`).join("");
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c88f5a" stop-opacity=".28"/><stop offset="1" stop-color="#c88f5a" stop-opacity="0"/></linearGradient></defs>
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0811f" stop-opacity=".28"/><stop offset="1" stop-color="#f0811f" stop-opacity="0"/></linearGradient></defs>
     ${grid}${rated.length > 1 ? `<path d="${area}" fill="url(#tg)"/>` : ""}${dots}<path d="${path}" fill="none" stroke="var(--leather-2)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${xt.join("")}</svg>`;
 }
 function distChart(rated) {
@@ -1533,7 +1875,7 @@ function viewSettings() {
   const types = { grinder: "Moedor", brewer: "Cafeteira", other: "Outro" };
   const ratios = Object.assign({}, DEFAULT_RATIO, S.settings.ratios || {});
   const html = `<div class="page narrow">
-    <div class="page-head"><div><div class="eyebrow">Configurações</div><h1 class="title">Ajustes</h1></div></div>
+    <div class="page-head"><div><div class="eyebrow ribbon">Configurações</div><h1 class="title">Ajustes</h1></div></div>
 
     <div class="card form-card">
       <h2 class="h3">Você</h2>
@@ -1553,9 +1895,18 @@ function viewSettings() {
     </div>
 
     <div class="card form-card">
+      <h2 class="h3">Abrir no celular</h2>
+      <p class="small muted" style="margin:-8px 0 0">Com o celular no <b>mesmo Wi-Fi</b> do Mac e o Coffee Lab aberto, digite no Safari do iPhone:</p>
+      <div id="lanUrls" class="stack" style="gap:8px"><span class="small muted">Buscando endereço…</span></div>
+      <p class="tiny faint" style="margin:0">Dica: no iPhone, toque em Compartilhar → <b>Adicionar à Tela de Início</b> pra ele virar um app com o ícone do buldogue.</p>
+    </div>
+
+    <div class="card form-card">
       <h2 class="h3">Seus dados</h2>
       <p class="small muted" style="margin:-8px 0 0">Tudo fica salvo no seu Mac, na pasta <span class="kbd">coffeelab/data</span>. Um backup do banco é feito automaticamente toda vez que o app abre (os últimos 30 ficam guardados em <span class="kbd">data/backups</span>).</p>
+      <div class="notice" id="cloudStatus">Verificando backup no iCloud…</div>
       <div class="row wrap">
+        <button class="btn primary" id="cloudNow">Fazer backup no iCloud agora</button>
         <a class="btn" href="/api/export" download>${ic("download")}Baixar backup (.json)</a>
         <label class="btn">${ic("upload")}Restaurar backup<input type="file" accept="application/json" id="imp" hidden></label>
       </div>
@@ -1572,6 +1923,19 @@ function viewSettings() {
         await loadState(); toast("Ajustes salvos");
       });
       $("#sName", v).onchange = () => safe(async () => { await api.put("/api/settings", { name: $("#sName", v).value.trim() }); await loadState(); toast("Nome salvo"); });
+      const showCloud = (st) => {
+        const el = $("#cloudStatus", v); if (!el) return;
+        if (!st.has_icloud) { el.innerHTML = `<b style="color:var(--warn)">iCloud Drive não encontrado.</b> Ative em Ajustes do Sistema → seu nome → iCloud → iCloud Drive. Enquanto isso, os backups ficam só no Mac.`; return; }
+        el.innerHTML = st.error ? `<b style="color:var(--bad)">Último backup no iCloud falhou:</b> ${esc(st.error)}`
+          : `☁️ Backup no iCloud ${st.last_cloud ? `feito às <b style="color:var(--text)">${fmtClock(st.last_cloud)}</b> (${fmtDayLabel(st.last_cloud).toLowerCase()})` : "ainda não feito"}. Pasta: <span class="kbd">iCloud Drive/CoffeeLab Backups</span>. Ele salva ao abrir, a cada 10 min se algo mudou e ao fechar.`;
+      };
+      api.get("/api/backup").then(showCloud).catch(() => {});
+      api.get("/api/info").then((r) => {
+        const box = $("#lanUrls", v); if (!box) return;
+        box.innerHTML = (r.lan || []).length ? r.lan.map((u) => `<div class="row between notice"><span class="kbd" style="font-size:14px">${esc(u)}</span><button class="btn sm" data-copy="${esc(u)}">Copiar</button></div>`).join("") : `<span class="small muted">Não achei o endereço da rede. Confere se o Mac está no Wi-Fi.</span>`;
+        $$("[data-copy]", box).forEach((b) => (b.onclick = () => { try { navigator.clipboard.writeText(b.dataset.copy); toast("Copiado"); } catch (_) {} }));
+      }).catch(() => {});
+      $("#cloudNow", v).onclick = () => safe(async () => { const r = await api.post("/api/backup"); showCloud(Object.assign({ has_icloud: true }, r)); toast(r.ok ? "Backup no iCloud feito ☁️" : "Não consegui fazer o backup", !r.ok); });
       $("#addEq", v).onclick = () => equipModal(null);
       $$("[data-eq]", v).forEach((b) => (b.onclick = () => equipModal(equipById(b.dataset.eq))));
       $("#imp", v).onchange = async (e) => {
@@ -1592,6 +1956,8 @@ function equipModal(e) {
       <div class="field"><label>Nome</label><input class="input" id="en" value="${esc(d.name)}" placeholder="Ex.: Timemore C2, Bodum Chambord"></div>
       <div class="form-grid" id="gOnly">
         <div class="field"><label>Manual ou elétrico</label><select class="select" id="ek"><option value="manual" ${d.kind === "manual" ? "selected" : ""}>Manual</option><option value="elétrico" ${d.kind === "elétrico" ? "selected" : ""}>Elétrico</option></select></div>
+        <div class="field"><label>Moagem padrão no espresso</label><input class="input" id="edE" inputmode="decimal" value="${esc(d.default_grind_espresso == null ? "" : d.default_grind_espresso)}" placeholder="Ex.: 7"></div>
+        <div class="field"><label>Moagem padrão (outros métodos)</label><input class="input" id="edO" inputmode="decimal" value="${esc(d.default_grind == null ? "" : d.default_grind)}" placeholder="—"></div>
         <div class="field"><label>Unidade da moagem</label><select class="select" id="eu">${["cliques", "número", "voltas", "µm"].map((u) => `<option ${d.unit === u ? "selected" : ""}>${u}</option>`).join("")}</select></div>
       </div>
       <div class="field"><label>Observações</label><input class="input" id="eo" value="${esc(d.notes || "")}" placeholder="Ex.: zerado em 0 com tudo fechado"></div>
@@ -1603,7 +1969,7 @@ function equipModal(e) {
   $("#ok", m.el).onclick = () => safe(async () => {
     const body = { type: d.type, name: $("#en", m.el).value.trim(), notes: $("#eo", m.el).value };
     if (!body.name) throw new Error("Dá um nome");
-    if (d.type === "grinder") { body.kind = $("#ek", m.el).value; body.unit = $("#eu", m.el).value; }
+    if (d.type === "grinder") { body.kind = $("#ek", m.el).value; body.unit = $("#eu", m.el).value; body.default_grind_espresso = $("#edE", m.el).value.trim() || null; body.default_grind = $("#edO", m.el).value.trim() || null; }
     e ? await api.put("/api/equipment/" + e.id, body) : await api.post("/api/equipment", body);
     m.close(); refresh();
   });

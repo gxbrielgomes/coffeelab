@@ -3,33 +3,36 @@
    ============================================================ */
 
 :root {
-  --bg: #0a0908;
-  --bg-2: #110f0d;
-  --card: #161310;
-  --card-2: #1d1914;
-  --line: rgba(243, 237, 228, 0.08);
-  --line-2: rgba(243, 237, 228, 0.14);
-  --text: #f3ede4;
-  --muted: #a69c90;
-  --faint: #6f675d;
-  --leather: #a86b3c;
-  --leather-2: #c88f5a;
-  --leather-deep: #6b3f20;
-  --leather-glow: rgba(168, 107, 60, 0.18);
-  --cream: #efe6d8;
-  --good: #93b37f;
-  --warn: #d9a55a;
-  --bad: #d0644f;
+  --bg: #14100d;
+  --bg-2: #0d0a08;
+  --card: #1b1612;
+  --card-2: #261e17;
+  --line: rgba(243, 230, 200, 0.13);
+  --line-2: rgba(243, 230, 200, 0.30);
+  --text: #f3e6c8;
+  --muted: #c2b18f;
+  --faint: #8a7a60;
+  --leather: #d63a2b;
+  --leather-2: #f0811f;
+  --leather-deep: #8e2219;
+  --leather-glow: rgba(214, 58, 43, 0.28);
+  --cream: #f3e6c8;
+  --gold: #e9b44c;
+  --ink: #0d0a08;
+  --good: #9bbf5e;
+  --warn: #e9b44c;
+  --bad: #ff5a3c;
 
-  --radius: 18px;
-  --radius-sm: 12px;
-  --radius-lg: 26px;
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 20px 50px -30px rgba(0, 0, 0, 0.9);
+  --radius: 22px;
+  --radius-sm: 13px;
+  --radius-lg: 30px;
+  --shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter",
-    "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Yellowtail", "Brush Script MT", "Snell Roundhand", cursive;
+  --font-display: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-cond: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
   --sidebar: 248px;
@@ -569,3 +572,379 @@ details.more[open] summary { margin-bottom: 16px; }
 .sensory { display: grid; grid-template-columns: 90px 1fr 28px; gap: 12px; align-items: center; font-size: 13px; }
 .mobile-only { display: none !important; }
 @media (max-width: 860px) { .mobile-only { display: inline-flex !important; } }
+
+/* treinador */
+.coach { border-color: rgba(200,143,90,0.28); background: linear-gradient(160deg, rgba(168,107,60,0.12), rgba(168,107,60,0.02) 60%), var(--card); }
+.coach .eyebrow { display: inline-flex; align-items: center; gap: 6px; }
+.coach .eyebrow svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.coach-tips { display: grid; gap: 10px; margin-top: 16px; }
+.coach-tip { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 14px; background: rgba(0,0,0,0.22); border: 1px solid var(--line); }
+.coach-tip b { font-weight: 620; letter-spacing: -0.01em; }
+.coach-tip span { color: var(--muted); font-size: 13.5px; }
+.coach-tip small { color: var(--faint); font-size: 11.5px; }
+
+/* painel do coado guiado */
+.timer-overlay { overflow-y: auto; }
+.pour-panel { position: absolute; left: 28px; top: 50%; transform: translateY(-50%); width: 300px; padding: 20px; border-radius: 22px; background: rgba(22,19,16,0.85); border: 1px solid var(--line-2); backdrop-filter: blur(14px); }
+.pour-panel[hidden] { display: none; }
+.pour-result { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.pour-result div { padding: 12px; border-radius: 14px; background: rgba(168,107,60,0.12); border: 1px solid rgba(200,143,90,0.3); }
+.pour-result span { display: block; font-size: 11.5px; color: var(--muted); }
+.pour-result b { font-size: 24px; font-weight: 650; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.pour-steps { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.pour-steps div { display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; padding: 7px 10px; border-radius: 10px; color: var(--muted); }
+.pour-steps div.on { background: var(--cream); color: #17110b; font-weight: 600; }
+.pour-steps div.done { opacity: .45; text-decoration: line-through; }
+@media (max-width: 1100px) {
+  .timer-overlay { justify-content: flex-start; padding-top: calc(70px + env(safe-area-inset-top)); padding-bottom: 40px; }
+  .pour-panel { position: static; transform: none; width: min(420px, 100%); margin-top: 26px; order: 10; }
+}
+
+
+/* ==========================================================
+   TEMA OLD SCHOOL / FLASH DE TATUAGEM
+   ========================================================== */
+body { font-size: 15.5px; letter-spacing: 0; }
+body::before {
+  background:
+    radial-gradient(900px 520px at 88% -12%, rgba(214, 58, 43, 0.16), transparent 60%),
+    radial-gradient(700px 420px at -10% 110%, rgba(240, 129, 31, 0.10), transparent 60%);
+}
+/* grão de papel envelhecido */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: 0;
+  background-image: radial-gradient(#f3e6c8 0.6px, transparent 0.7px); background-size: 3px 3px;
+}
+::selection { background: var(--leather); color: var(--cream); }
+
+/* tipografia */
+.title { font-family: var(--font-display); font-weight: 850; letter-spacing: -0.035em; line-height: 1.02; font-size: clamp(32px, 4.6vw, 50px); }
+.title em { font-family: var(--font-serif); text-transform: none; color: var(--leather-2); font-size: 1.12em; letter-spacing: 0; display: inline-block; transform: rotate(-3deg); margin-left: 4px; }
+.eyebrow { font-family: var(--font-cond); font-weight: 700; letter-spacing: 0.16em; color: var(--gold); font-size: 12.5px; }
+.h2 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; font-size: 21px; }
+.section-head .h2::before { content: "✦ "; color: var(--leather); }
+.subtitle { color: var(--muted); }
+.stat .v, .score, .rating-big .v, .kv div b { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.03em; }
+.stat .v { font-size: 30px; }
+.stat .k, .label, .field > label { font-family: var(--font-cond); text-transform: uppercase; letter-spacing: 0.08em; font-size: 11px; font-weight: 650; }
+.label .faint { text-transform: none; letter-spacing: 0; font-family: var(--font); }
+.rating-word { font-family: var(--font-serif); color: var(--leather-2); font-size: 26px; }
+
+/* marca */
+.brand-name { font-family: var(--font-display); font-weight: 850; font-size: 21px; letter-spacing: -0.03em; }
+.brand-name em { font-family: var(--font-serif); text-transform: none; color: var(--leather-2); font-size: 1.25em; margin-left: 2px; }
+.brand-est { display: block; font-family: var(--font-cond); font-size: 10px; letter-spacing: .3em; color: var(--gold); margin: -2px 0 0 48px; }
+.sidebar { background: rgba(13, 10, 8, 0.82); border-right: 2px solid var(--line-2); }
+.nav a { font-weight: 600; font-size: 14.5px; border-radius: 12px; }
+.nav a.active { background: transparent; color: var(--cream); box-shadow: inset 0 0 0 2px var(--line-2); }
+.nav a.active svg { color: var(--leather); }
+.nav a.cta { background: var(--leather); color: var(--cream); box-shadow: 3px 3px 0 #000; border: 2px solid var(--ink); }
+.nav a.cta svg { color: var(--cream); }
+.nav a.cta:hover { background: #e8483a; }
+.nav-timer { border: 2px solid var(--line-2); font-weight: 600; border-radius: 16px; }
+.nav-timer-time { color: var(--leather-2); }
+
+/* cards = adesivos */
+.card { border: 2px solid var(--line-2); box-shadow: var(--shadow); }
+.card.link:hover { border-color: var(--cream); transform: translate(-2px, -2px); box-shadow: 7px 7px 0 rgba(0,0,0,.6); }
+.card.flat { box-shadow: none; }
+
+/* botões */
+.btn { font-weight: 650; border-radius: 999px; border: 2px solid var(--line-2); box-shadow: 3px 3px 0 #000; }
+.btn:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #000; }
+.btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
+.btn.primary { background: var(--leather); color: var(--cream); border-color: var(--ink); }
+.btn.primary:hover { background: #e8483a; }
+.btn.cream { background: var(--cream); color: var(--ink); border-color: var(--ink); }
+.btn.ghost { box-shadow: none; border-color: transparent; }
+.btn.ghost:hover { transform: none; box-shadow: none; }
+.btn.danger { color: var(--bad); }
+
+/* chips / segmentos */
+.chip { border: 2px solid var(--line-2); font-weight: 600; border-radius: 999px; }
+.chip.on { background: var(--cream); color: var(--ink); border-color: var(--cream); box-shadow: 2px 2px 0 #000; }
+.chip.leather.on { background: var(--leather); color: var(--cream); border-color: var(--ink); }
+.seg { border: 2px solid var(--line-2); border-radius: 999px; }
+.seg button { font-weight: 650; border-radius: 999px; }
+.seg button.on { background: var(--leather); color: var(--cream); }
+
+/* inputs */
+.input, .select, .textarea, .stepper { border: 2px solid var(--line-2); background: var(--bg-2); }
+.input:focus, .select:focus, .textarea:focus, .stepper:focus-within { border-color: var(--leather-2); box-shadow: 0 0 0 3px rgba(240,129,31,.22); }
+.range { background: linear-gradient(to right, var(--leather) 0%, var(--leather-2) var(--p, 50%), var(--line-2) var(--p, 50%)); height: 8px; border: 1.5px solid var(--ink); }
+.range::-webkit-slider-thumb { background: var(--cream); border: 3px solid var(--ink); box-shadow: 2px 2px 0 #000; width: 26px; height: 26px; }
+.toggle input:checked + .track { background: var(--leather); }
+
+/* hero = placa de tatuagem */
+.hero {
+  border: 3px solid var(--cream); border-radius: 32px;
+  background:
+    repeating-conic-gradient(from 0deg at 84% 50%, rgba(214,58,43,0.07) 0 6deg, transparent 6deg 14deg),
+    radial-gradient(80% 110% at 85% 30%, rgba(240,129,31,0.22), transparent 60%),
+    linear-gradient(160deg, #1f1812 0%, #110d0a 100%);
+  box-shadow: 8px 8px 0 #000, inset 0 0 0 8px var(--bg-2), inset 0 0 0 10px rgba(243,230,200,.35);
+}
+.hero::after { display: none; }
+.hero .star { position: absolute; color: var(--cream); font-size: 22px; line-height: 1; pointer-events: none; z-index: 1; }
+.hero .star.s1 { top: 26px; right: 38%; } .hero .star.s2 { bottom: 34px; right: 6%; font-size: 16px; color: var(--gold); } .hero .star.s3 { top: 44%; right: 3%; font-size: 12px; }
+@media (max-width: 760px) { .hero .star.s1 { right: 12%; } }
+
+/* saquinhos com contorno de adesivo */
+.bag-av { filter: drop-shadow(2px 0 0 var(--cream)) drop-shadow(-2px 0 0 var(--cream)) drop-shadow(0 2px 0 var(--cream)) drop-shadow(0 -2px 0 var(--cream)) drop-shadow(5px 7px 0 rgba(0,0,0,.55)); }
+.shape-pick button .bag-av, .coffee-pick .bag-av { filter: drop-shadow(1.5px 0 0 var(--cream)) drop-shadow(-1.5px 0 0 var(--cream)) drop-shadow(0 1.5px 0 var(--cream)) drop-shadow(0 -1.5px 0 var(--cream)); }
+.coffee-card:hover .bag-av { transform: translateY(-4px) rotate(-4deg); }
+
+/* seleção de café/método */
+.coffee-pick, .method { border: 2px solid var(--line-2); border-radius: 18px; }
+.coffee-pick.on, .method.on { border-color: var(--leather); background: linear-gradient(180deg, rgba(214,58,43,0.20), rgba(214,58,43,0.05)); box-shadow: 3px 3px 0 #000; }
+.method.on svg { color: var(--leather-2); }
+.method { font-weight: 650; }
+.step-n { background: var(--leather); color: var(--cream); border: 2px solid var(--ink); font-family: var(--font-display); font-weight: 800; }
+.ratio-pill { border: 2px solid var(--line-2); }
+.brew-icon { border: 2px solid var(--line-2); color: var(--leather-2); }
+
+/* badges */
+.badge { font-weight: 700; border-radius: 999px; }
+.badge.leather { background: var(--leather); color: var(--cream); }
+
+/* barras / progress */
+.progress, .hbar .track { border: 1.5px solid var(--ink); background: rgba(243,230,200,.1); }
+.progress > i, .hbar .track i { background: repeating-linear-gradient(135deg, var(--leather) 0 8px, #c4301f 8px 16px); }
+
+/* dicas e sugestões */
+.suggest { border: 2px dashed var(--leather-2); background: rgba(240,129,31,0.07); }
+.suggest .h3 { color: var(--leather-2); }
+.coach { border: 2px solid var(--leather); background: linear-gradient(160deg, rgba(214,58,43,0.16), rgba(214,58,43,0.02) 60%), var(--card); }
+.coach .eyebrow { color: var(--leather-2); }
+.coach-tip { border: 1.5px solid var(--line-2); background: rgba(0,0,0,0.3); border-radius: 16px; }
+.coach-tip b { font-family: var(--font-display); font-weight: 750; letter-spacing: -0.01em; }
+
+/* tabbar mobile */
+@media (max-width: 860px) {
+  .tabbar { background: rgba(13,10,8,0.85); backdrop-filter: saturate(160%) blur(22px); -webkit-backdrop-filter: saturate(160%) blur(22px); border: 2px solid var(--cream); border-radius: 26px; box-shadow: 4px 4px 0 #000; }
+  .tabbar a { font-weight: 600; }
+  .tabbar a.active svg { color: var(--leather); }
+  .tabbar a.cta svg { background: var(--leather); color: var(--cream); border: 2px solid var(--ink); box-shadow: 2px 2px 0 #000; }
+}
+
+/* modal, toast, timer */
+.modal { border: 3px solid var(--cream); box-shadow: 8px 8px 0 #000; border-radius: 30px; }
+.toast { background: var(--cream); color: var(--ink); border: 2px solid var(--ink); box-shadow: 3px 3px 0 #000; border-radius: 999px; }
+.toast.bad { background: var(--leather); color: var(--cream); }
+.timer-overlay { background: repeating-conic-gradient(from 0deg at 50% 38%, rgba(214,58,43,0.07) 0 5deg, transparent 5deg 12deg), radial-gradient(80% 60% at 50% 32%, #2a1a12 0%, #0b0807 75%); }
+.timer-clock { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.04em; font-size: clamp(60px, 16vw, 100px); }
+.timer-ring .fg { stroke: var(--leather-2); }
+.round-btn { font-weight: 650; border: 2px solid var(--line-2); box-shadow: 3px 3px 0 #000; }
+.round-btn.go { background: var(--leather); color: var(--cream); border: 2px solid var(--ink); }
+.round-btn.go.stop { background: var(--cream); color: var(--ink); }
+.pour-panel { border: 2px solid var(--cream); box-shadow: 6px 6px 0 #000; border-radius: 26px; }
+.pour-result div { background: rgba(214,58,43,0.14); border: 2px solid var(--leather); }
+.pour-result b { font-family: var(--font-display); font-weight: 800; }
+.mini-timer .clock { font-family: var(--font-display); font-weight: 700; letter-spacing: -.04em; }
+.day-label { color: var(--gold); }
+.editor-preview { border: 2px solid var(--line-2); background: repeating-conic-gradient(from 0deg at 50% 26%, rgba(214,58,43,0.08) 0 6deg, transparent 6deg 14deg), var(--card); box-shadow: var(--shadow); }
+.kbd { border: 1.5px solid var(--line-2); }
+.chart text { font-family: var(--font); }
+
+/* toque Apple: números arredondados e títulos de card */
+.h3 { font-weight: 700; letter-spacing: -0.015em; }
+.stat .v { font-size: 32px; }
+.rating-big .v { font-size: 60px; }
+.title em { font-weight: 400; }
+
+/* ===== detalhes de personalidade ===== */
+.ribbon {
+  display: inline-flex; align-items: center; gap: 6px; width: max-content; max-width: 100%;
+  padding: 5px 20px 5px 18px; background: var(--leather); color: var(--cream) !important;
+  font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 50%, 100% 100%, 0 100%, 9px 50%);
+}
+.ribbon svg { width: 12px; height: 12px; }
+.page-head .ribbon, .hero .ribbon { margin-bottom: 8px; }
+
+.hero-logo { display: flex; justify-content: flex-end; align-items: center; }
+.hero-logo img { width: min(250px, 100%); filter: drop-shadow(6px 8px 0 rgba(0,0,0,.55)); transform: rotate(-6deg); transition: transform .5s var(--ease); }
+.hero:hover .hero-logo img { transform: rotate(-2deg) scale(1.03); }
+@media (max-width: 760px) {
+  .hero-logo { position: absolute; top: 18px; right: 54px; }
+  .hero-logo img { width: 84px; }
+  .hero > div:not(.hero-logo) { padding-top: 70px; }
+}
+
+.brand-mark img { width: 40px; height: 40px; display: block; transform: rotate(-8deg); }
+.brand-est { margin-left: 58px; }
+
+.stat.flash { position: relative; padding-top: 32px; }
+.stat.flash .no { position: absolute; top: 12px; left: 20px; font-size: 10px; font-weight: 800; letter-spacing: .18em; color: var(--leather-2); }
+.stat.flash::after { content: "✦"; position: absolute; top: 10px; right: 16px; color: var(--line-2); font-size: 13px; }
+
+.score-dot { min-width: 46px; height: 46px; padding: 0 6px; border-radius: 50%; display: inline-grid; place-items: center; font-family: var(--font-display); font-weight: 850; font-size: 16px; letter-spacing: -.03em; border: 2.5px solid var(--ink); box-shadow: 2px 2px 0 #000; }
+.score-dot.top { background: var(--leather); color: var(--cream); }
+.score-dot.ok { background: var(--gold); color: var(--ink); }
+.score-dot.low { background: var(--card-2); color: var(--muted); border-color: var(--line-2); }
+.score-dot.none { background: transparent; color: var(--faint); border: 2px dashed var(--line-2); box-shadow: none; }
+
+.stamp { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 104px; height: 104px; border-radius: 50%;
+  border: 5px double currentColor; transform: rotate(-12deg); text-align: center; line-height: 1; position: relative; }
+.stamp::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; border: 1.5px dashed currentColor; opacity: .55; }
+.stamp small { font-size: 9px; font-weight: 900; letter-spacing: .14em; }
+.stamp b { font-family: var(--font-display); font-weight: 900; font-size: 36px; letter-spacing: -.04em; margin-top: 3px; }
+.stamp.top { color: var(--leather); } .stamp.ok { color: var(--gold); } .stamp.low { color: var(--faint); }
+.stamp.lg { width: 130px; height: 130px; } .stamp.lg b { font-size: 46px; }
+
+.coffee-card::before, .coffee-card::after { content: ""; position: absolute; top: 64%; width: 20px; height: 20px; border-radius: 50%; background: var(--bg); border: 2px solid var(--line-2); }
+.coffee-card::before { left: -12px; clip-path: inset(0 0 0 50%); }
+.coffee-card::after { right: -12px; clip-path: inset(0 50% 0 0); }
+.coffee-card .grams { border-top: 2px dashed var(--line-2); padding-top: 10px; width: 100%; margin-top: 14px; }
+.pantry .coffee-card:nth-child(3n+1) { transform: rotate(-.7deg); }
+.pantry .coffee-card:nth-child(3n+2) { transform: rotate(.6deg); }
+.pantry .coffee-card:hover { transform: rotate(0) translate(-2px,-2px); }
+
+.coach-av { width: 60px; height: 60px; border-radius: 50%; background: #14100d; border: 2.5px solid var(--cream); box-shadow: 3px 3px 0 #000; transform: rotate(-6deg); flex-shrink: 0; }
+.coach-tip { position: relative; padding-left: 36px; }
+.coach-tip::before { content: "✦"; position: absolute; left: 14px; top: 12px; color: var(--leather-2); font-size: 13px; }
+
+.section-head { border-bottom: 2px solid var(--line); padding-bottom: 10px; }
+.divider { background: none; border-top: 2px dashed var(--line-2); height: 0; }
+.day-label { display: flex; align-items: center; gap: 10px; }
+.day-label::after { content: ""; flex: 1; border-top: 2px dashed var(--line); }
+
+.empty-state::before { content: ""; width: 96px; height: 96px; background: #14100d url(avatar-v2.png) center/contain no-repeat; border-radius: 50%; border: 2.5px solid var(--cream); box-shadow: 4px 4px 0 #000; transform: rotate(-6deg); margin-bottom: 6px; }
+.empty-state .bag-av { display: none; }
+
+/* ===== estética de adesivo die-cut + impressão gasta ===== */
+:root {
+  /* textura de impressão gasta (pontinhos/riscos) */
+  --grunge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -9 5.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  --grunge-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='3'/%3E%3CfeColorMatrix values='0 0 0 0 1  0 0 0 0 .95  0 0 0 0 .85  0 0 0 -9 5.4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+}
+
+/* letreiro de adesivo: grosso, com contorno e sombra deslocada */
+.title {
+  font-weight: 900; letter-spacing: -0.04em; color: var(--cream);
+  text-shadow: 3px 3px 0 var(--leather), 6px 6px 0 #000;
+}
+.title em {
+  color: var(--leather-2);
+  text-shadow: 2px 2px 0 #000;
+  -webkit-text-stroke: 0;
+}
+.hero .title { font-size: clamp(38px, 5.4vw, 60px); }
+
+
+/* recorte de adesivo: borda creme por fora + sombra suave como foto de sticker */
+.hero { outline: 6px solid var(--cream); outline-offset: 6px; box-shadow: 0 30px 50px -20px rgba(0,0,0,.9), inset 0 0 0 8px var(--bg-2), inset 0 0 0 10px rgba(243,230,200,.35); border-color: var(--ink); }
+.coffee-card, .stat.flash, .coach { box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--cream), 0 22px 30px -14px rgba(0,0,0,.85); border-color: var(--ink); }
+.coffee-card:hover, .pantry .coffee-card:hover { box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--leather-2), 0 28px 36px -14px rgba(0,0,0,.9); }
+.stat.flash:nth-child(4n+1) { transform: rotate(-.8deg); } .stat.flash:nth-child(4n+3) { transform: rotate(.7deg); }
+.section { margin-top: 44px; }
+
+/* logo e avatar com contorno die-cut */
+.hero-logo img, .brand-mark img, .coach-av {
+  filter: drop-shadow(3px 0 0 var(--cream)) drop-shadow(-3px 0 0 var(--cream)) drop-shadow(0 3px 0 var(--cream)) drop-shadow(0 -3px 0 var(--cream)) drop-shadow(0 14px 14px rgba(0,0,0,.6));
+}
+.brand-mark img { filter: drop-shadow(1.5px 0 0 var(--cream)) drop-shadow(-1.5px 0 0 var(--cream)) drop-shadow(0 1.5px 0 var(--cream)) drop-shadow(0 -1.5px 0 var(--cream)); }
+
+/* números grandes com cara de letreiro */
+.stat .v { text-shadow: 2px 2px 0 var(--leather); }
+.rating-big .v { text-shadow: 3px 3px 0 var(--leather), 5px 5px 0 #000; }
+
+/* ===== marca em letreiro BOLD (sem cursiva) ===== */
+.brand { gap: 12px; }
+.brand-name {
+  font-family: var(--font-display); font-weight: 900; font-size: 22px; line-height: .92;
+  text-transform: uppercase; letter-spacing: .01em; color: var(--cream);
+  display: inline-flex; flex-direction: column;
+  text-shadow: 2px 2px 0 var(--leather), 4px 4px 0 #000;
+}
+.brand-name em {
+  font-family: var(--font-display); font-style: normal; font-weight: 900; font-size: 1.32em;
+  color: var(--leather); margin: 0; letter-spacing: .04em;
+  -webkit-text-stroke: 1.5px var(--ink); paint-order: stroke fill;
+  text-shadow: 3px 3px 0 var(--cream), 5px 5px 0 #000;
+}
+.brand-name em { text-transform: uppercase; }
+
+/* ===== fim da cursiva: tudo em letreiro bold ===== */
+:root { --font-serif: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, sans-serif; }
+.title em {
+  font-family: var(--font-display); font-style: normal; font-weight: 900; font-size: 1em;
+  color: var(--leather-2); letter-spacing: -0.04em; transform: rotate(-2deg); margin-left: 0;
+  text-shadow: 3px 3px 0 var(--ink), 5px 5px 0 var(--leather);
+}
+.rating-word { font-family: var(--font-display); font-style: normal; font-weight: 900; font-size: 15px; text-transform: uppercase; letter-spacing: .1em; }
+
+/* ===================================================================
+   LIMPEZA + LETREIRO ESTILO CAPA DE DISCO (MF DOOM vibe)
+   Personalidade só na tipografia; o resto clean.
+   =================================================================== */
+:root {
+  --font-poster: "Bowlby One", "Futura Condensed ExtraBold", "Impact", "Arial Black", sans-serif;
+  --shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* títulos */
+.title, .hero .title {
+  font-family: var(--font-poster); font-weight: 400; text-transform: uppercase;
+  font-size: clamp(34px, 4.8vw, 56px); line-height: .95; letter-spacing: .005em;
+  color: var(--cream); text-shadow: 3px 3px 0 #000;
+}
+.title em {
+  font-family: var(--font-poster); font-weight: 400; font-size: 1em; color: var(--leather-2);
+  letter-spacing: .005em; transform: none; text-shadow: 3px 3px 0 #000;
+}
+.h2 { font-family: var(--font-poster); font-weight: 400; text-transform: uppercase; letter-spacing: .02em; font-size: 19px; }
+.section-head .h2::before { content: none; }
+
+/* marca */
+.brand-name { font-family: var(--font-poster); font-weight: 400; font-size: 21px; line-height: .95; text-shadow: 2px 2px 0 #000; }
+.brand-name em { font-family: var(--font-poster); font-weight: 400; font-size: 1.15em; letter-spacing: .02em; color: var(--leather); -webkit-text-stroke: 0; text-shadow: 2px 2px 0 #000; }
+
+/* números: limpos, sem sombra colorida */
+.stat .v, .rating-big .v { text-shadow: none; }
+
+/* hero limpo */
+.hero {
+  outline: none; border: 2px solid var(--line-2); border-radius: 28px;
+  background: radial-gradient(90% 120% at 90% 20%, rgba(214,58,43,0.16), transparent 60%), linear-gradient(160deg, #1c1611 0%, #120e0b 100%);
+  box-shadow: var(--shadow);
+}
+.hero .star { opacity: .55; }
+
+/* cards limpos: borda fina + sombra simples */
+.card, .coffee-card, .stat.flash, .coach { box-shadow: var(--shadow); border: 2px solid var(--line); }
+.coffee-card:hover, .pantry .coffee-card:hover, .card.link:hover { box-shadow: 6px 6px 0 rgba(0,0,0,.5); border-color: var(--line-2); }
+.pantry .coffee-card:nth-child(n), .stat.flash:nth-child(n) { transform: none; }
+.coach { border-color: rgba(214,58,43,.5); }
+.stat.flash::after { content: none; }
+
+/* botões e chips: sombra menor */
+.btn { box-shadow: 2px 2px 0 #000; }
+.btn.ghost { box-shadow: none; }
+.nav a.cta { box-shadow: 2px 2px 0 #000; }
+.timer-overlay, .editor-preview { background-image: none; }
+.timer-overlay { background: radial-gradient(80% 60% at 50% 32%, #22170f 0%, #0b0807 75%); }
+
+/* logo: só o contorno de recorte, sem sombra pesada */
+.hero-logo img { filter: drop-shadow(0 12px 16px rgba(0,0,0,.5)); transform: rotate(-4deg); }
+.coach-av, .brand-mark img { filter: none; }
+
+/* logo nova (buldogue) */
+.hero-logo img { width: min(280px, 100%); transform: rotate(-3deg); }
+.brand-mark img { width: 46px; height: 46px; transform: none; }
+.coach-av { object-fit: cover; }
+
+/* saquinho novo: sombra suave em vez do contorno grosso */
+.bag-av { filter: drop-shadow(0 10px 12px rgba(0,0,0,.55)); }
+.shape-pick button .bag-av, .coffee-pick .bag-av { filter: drop-shadow(0 4px 5px rgba(0,0,0,.5)); }
+.coffee-card .bag-av { width: 118px; }
+
+/* saco minimalista: sem sombra pesada */
+.bag-av { filter: none; }
+.coffee-card:hover .bag-av { transform: translateY(-3px); }
+/* saquinhos desenhados à mão: maiores e com uma leve inclinação */
+.coffee-card .bag-av { width: 136px; margin-bottom: 8px; }
+.pantry .coffee-card:nth-child(odd) .bag-av { transform: rotate(-3deg); }
+.pantry .coffee-card:nth-child(even) .bag-av { transform: rotate(2.5deg); }
+.pantry .coffee-card:hover .bag-av { transform: rotate(0) translateY(-4px); }
+.mini-bag .bag-av { width: 74px; }

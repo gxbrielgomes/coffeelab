@@ -17,6 +17,7 @@ import mimetypes
 import os
 import re
 import shutil
+import signal
 import sqlite3
 import sys
 import threading
@@ -34,9 +35,14 @@ PHOTOS = os.path.join(DATA, "photos")
 BACKUPS = os.path.join(DATA, "backups")
 DB_PATH = os.path.join(DATA, "coffeelab.db")
 
-HOST = os.environ.get("COFFEELAB_HOST", "127.0.0.1")
+HOST = os.environ.get("COFFEELAB_HOST", "0.0.0.0")  # 0.0.0.0 = também acessível pelo celular no mesmo Wi-Fi
 PORT = int(os.environ.get("COFFEELAB_PORT", "5173"))
 KEEP_BACKUPS = 30
+KEEP_CLOUD_BACKUPS = 90
+CLOUD_ROOT = os.path.expanduser("~/Library/Mobile Documents/com~apple~CloudDocs")
+CLOUD_DIR = os.path.join(CLOUD_ROOT, "CoffeeLab Backups")
+CLOUD_EVERY_S = 10 * 60   # enquanto roda, manda pro iCloud a cada 10 min se algo mudou
+STATE = {"dirty": False, "last_cloud": None, "cloud_error": None}
 MAX_BODY = 25 * 1024 * 1024  # 25 MB
 
 COLLECTIONS = ("coffees", "bags", "brews", "equipment")
@@ -45,6 +51,30 @@ LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------- utilidades
+
+def lan_urls():
+    """Endereços pra abrir no celular (mesma rede Wi-Fi)."""
+    import socket
+    urls = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        if not ip.startswith("127."):
+            urls.append("http://%s:%d" % (ip, PORT))
+    except Exception:
+        pass
+    try:
+        name = socket.gethostname()
+        if name:
+            if not name.endswith(".local"):
+                name = name.split(".")[0] + ".local"
+            urls.append("http://%s:%d" % (name, PORT))
+    except Exception:
+        pass
+    return urls
+
 
 def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
@@ -99,6 +129,67 @@ def backup_db():
             os.remove(os.path.join(BACKUPS, old))
         except OSError:
             pass
+
+
+def export_dict(conn):
+    out = {c: all_docs(conn, c) for c in COLLECTIONS}
+    out["settings"] = get_settings(conn)
+    out["exported_at"] = now_iso()
+    out["app"] = "coffeelab"
+    return out
+
+
+def cloud_backup(reason=""):
+    """Copia banco + JSON + fotos pro iCloud Drive (se existir). Nunca derruba o app."""
+    if not os.path.isdir(CLOUD_ROOT):
+        STATE["cloud_error"] = "iCloud Drive não encontrado neste Mac"
+        return False
+    try:
+        os.makedirs(os.path.join(CLOUD_DIR, "banco"), exist_ok=True)
+        os.makedirs(os.path.join(CLOUD_DIR, "fotos"), exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        # 1) cópia consistente do banco
+        src = sqlite3.connect(DB_PATH)
+        dst = sqlite3.connect(os.path.join(CLOUD_DIR, "banco", "coffeelab-%s.db" % stamp))
+        with dst:
+            src.backup(dst)
+        # 2) JSON legível (sempre o mais recente)
+        src.row_factory = sqlite3.Row
+        data = export_dict(src)
+        src.close(); dst.close()
+        tmp = os.path.join(CLOUD_DIR, "coffeelab-ultimo.json.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, os.path.join(CLOUD_DIR, "coffeelab-ultimo.json"))
+        # 3) fotos novas
+        for name in os.listdir(PHOTOS):
+            d = os.path.join(CLOUD_DIR, "fotos", name)
+            if not os.path.exists(d):
+                shutil.copy2(os.path.join(PHOTOS, name), d)
+        # mantém só os últimos KEEP_CLOUD_BACKUPS bancos
+        dbs = sorted(f for f in os.listdir(os.path.join(CLOUD_DIR, "banco")) if f.endswith(".db"))
+        for old in dbs[:-KEEP_CLOUD_BACKUPS]:
+            try:
+                os.remove(os.path.join(CLOUD_DIR, "banco", old))
+            except OSError:
+                pass
+        STATE["last_cloud"] = now_iso()
+        STATE["cloud_error"] = None
+        STATE["dirty"] = False
+        print("  ☁️  backup no iCloud ok%s" % (" (" + reason + ")" if reason else ""))
+        return True
+    except Exception as e:  # noqa
+        STATE["cloud_error"] = str(e)
+        print("  ⚠️  backup no iCloud falhou: %s" % e)
+        return False
+
+
+def cloud_loop():
+    while True:
+        time.sleep(CLOUD_EVERY_S)
+        if STATE["dirty"]:
+            with LOCK:
+                cloud_backup("automático")
 
 
 def row_to_doc(row):
@@ -297,6 +388,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with LOCK:
                 self.api(method, parts)
+                if method != "GET":
+                    STATE["dirty"] = True
         except ValueError as e:
             self.send_error_json(400, str(e))
         except Exception as e:  # noqa
@@ -348,6 +441,17 @@ class Handler(BaseHTTPRequestHandler):
             out["settings"] = get_settings(conn)
             return self.send_json(out)
 
+        if head == "info" and method == "GET":
+            return self.send_json({"lan": lan_urls()})
+
+        if head == "backup":
+            if method == "POST":
+                conn.commit()
+                ok = cloud_backup("manual")
+                return self.send_json({"ok": ok, "last_cloud": STATE["last_cloud"], "error": STATE["cloud_error"]})
+            return self.send_json({"cloud_dir": CLOUD_DIR, "has_icloud": os.path.isdir(CLOUD_ROOT),
+                                   "last_cloud": STATE["last_cloud"], "error": STATE["cloud_error"], "dirty": STATE["dirty"]})
+
         if head == "settings" and method == "PUT":
             body = self.read_json()
             for k, v in body.items():
@@ -363,10 +467,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({"url": save_photo(body.get("data"))})
 
         if head == "export" and method == "GET":
-            out = {c: all_docs(conn, c) for c in COLLECTIONS}
-            out["settings"] = get_settings(conn)
-            out["exported_at"] = now_iso()
-            out["app"] = "coffeelab"
+            out = export_dict(conn)
             fname = "coffeelab-backup-%s.json" % datetime.now().strftime("%Y-%m-%d")
             return self.send_json(out, extra_headers={
                 "Content-Disposition": 'attachment; filename="%s"' % fname})
@@ -497,16 +598,24 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     init_db()
     backup_db()
+    cloud_backup("ao abrir")
+    threading.Thread(target=cloud_loop, daemon=True).start()
     url = "http://localhost:%d" % PORT
     try:
         httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError:
         print("\n  A porta %d já está em uso — o CoffeeLab provavelmente já está aberto." % PORT)
-        print("  Abrindo %s\n" % url)
-        webbrowser.open(url)
+        if "--no-browser" not in sys.argv:
+            webbrowser.open(url)
         return
+
+    def stop(*_):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop)
     print("\n  ☕  CoffeeLab rodando em %s" % url)
     print("  Dados em: %s" % DATA)
+    for u in lan_urls():
+        print("  📱 No celular (mesmo Wi-Fi): %s" % u)
     print("  Para fechar: Ctrl + C\n")
     if "--no-browser" not in sys.argv:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
@@ -516,6 +625,9 @@ def main():
         print("\n  Até o próximo café! ☕\n")
     finally:
         httpd.server_close()
+        if STATE["dirty"]:
+            with LOCK:
+                cloud_backup("ao fechar")
 
 
 if __name__ == "__main__":
